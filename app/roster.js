@@ -234,7 +234,7 @@ function renderGanttPanel(date) {
           <div class="gantt-stat-value" id="ghd-spch" style="color:${spchCol};">${spch ? '$'+spch : '—'}</div>
           ${displaySales ? `<div style="font-size:10px;color:var(--text3);text-align:center;" id="ghd-sales">of $${(displaySales/1000).toFixed(1)}k${proj?'':' (trend)'}</div>` : ''}
         </div>
-        <button class="btn btn-primary btn-sm" onclick="openAddShift('','${date}')">+ Add Shift</button>
+        <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openAddShift('','${date}')">+ Add Shift</button>
       </div>
     </div>
     <div class="gantt-wrap" id="gantt-wrap-${date}">
@@ -556,10 +556,30 @@ function openEditShiftFromPopover(shiftId) {
 
 async function deleteUnassignedShift(shiftId) {
   const shift = shifts.find(s => s.id === shiftId);
-  const date  = shift?.date;
+  if (!shift) return;
+  const date  = shift.date;
+  const empId = shift.employee_id;
+  closeAssignPopover(); // close first so outside-click handler doesn't interfere
   await dbDeleteShift(shiftId);
-  closeAssignPopover();
-  if (date === _activeDay) renderGanttPanel(date);
+
+  if (date === _activeDay) {
+    if (empId) {
+      const emp   = employees.find(e => e.id === empId);
+      const rowEl = document.getElementById(`gantt-row-${empId}-${date}`);
+      if (emp && rowEl) {
+        const empShifts = shifts.filter(s => s.employee_id === empId && s.date === date && s.status !== 'cancelled');
+        rowEl.outerHTML = buildGanttRow(emp, date, empShifts);
+      }
+    } else {
+      const rowEl = document.getElementById(`gantt-row-unassigned-${date}`);
+      if (rowEl) {
+        const unassigned = shifts.filter(s => s.date === date && !s.employee_id && s.status !== 'cancelled');
+        rowEl.outerHTML = buildUnassignedRow(date, unassigned);
+      }
+    }
+    refreshDayHeading(date);
+  }
+
   renderDayTabs(getWeekDates(_currentWeekStart));
   renderRosterKPIs(getWeekDates(_currentWeekStart));
   toast('Shift deleted');
@@ -624,9 +644,11 @@ function onTrackMouseDown(e, empId, date) {
   document.addEventListener('mouseup', up);
 }
 
-// Plain click on empty track → open modal at that hour
+// Plain click on empty track → open modal at that hour (employee rows only)
 function onTrackClick(e, empId, date) {
   if (e.target.closest('.shift-bar')) return;
+  // Unassigned track: clicks are handled by bar popovers; empty clicks do nothing
+  if (!empId) return;
   closeAssignPopover();
   const rect = e.currentTarget.getBoundingClientRect();
   const pct  = ((e.clientX - rect.left) / rect.width) * 100;
