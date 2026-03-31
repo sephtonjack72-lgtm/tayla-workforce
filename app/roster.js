@@ -8,6 +8,15 @@ let _currentWeekStart = getWeekStart(new Date().toISOString().split('T')[0]);
 let _activeDay        = new Date().toISOString().split('T')[0];
 let _assignPopover    = null; // { shiftId, el }
 
+// ── Pay cache — cleared on each render, avoids recalculating per shift repeatedly
+const _payCache = {};
+function cachedShiftPay(shift, emp) {
+  const key = `${shift.id}-${emp.id}-${shift.start_time}-${shift.end_time}-${shift.date}`;
+  if (!_payCache[key]) _payCache[key] = calcShiftPay(shift, emp);
+  return _payCache[key];
+}
+function clearPayCache() { Object.keys(_payCache).forEach(k => delete _payCache[k]); }
+
 const TIMELINE_START = 6;
 const TIMELINE_END   = 26;
 const TIMELINE_HOURS = TIMELINE_END - TIMELINE_START;
@@ -89,6 +98,7 @@ function switchDay(date) {
 // ══════════════════════════════════════════════════════
 
 function renderRoster() {
+  clearPayCache();
   const weekDates = getWeekDates(_currentWeekStart);
   const weekEnd   = weekDates[6];
   if (!weekDates.includes(_activeDay)) _activeDay = weekDates[0];
@@ -119,9 +129,11 @@ function renderRosterKPIs(weekDates) {
   const activeEmps  = employees.filter(e => e.active !== false);
   let totalHours = 0, totalCost = 0;
   activeEmps.forEach(emp => {
-    const pay = calcWeeklyPay(assigned.filter(s => s.employee_id === emp.id), emp);
-    totalHours += pay.totalHours;
-    totalCost  += pay.totalPay;
+    assigned.filter(s => s.employee_id === emp.id).forEach(s => {
+      const p = cachedShiftPay(s, emp);
+      totalHours += p.workedHours;
+      totalCost  += p.totalPay;
+    });
   });
   const staffed = new Set(assigned.map(s => s.employee_id)).size;
   let weekProj = 0;
@@ -158,7 +170,7 @@ function renderDayTabs(weekDates) {
     let dayCost = 0, dayHours = 0;
     employees.filter(e => e.active !== false).forEach(emp => {
       dayShifts.filter(s => s.employee_id === emp.id).forEach(s => {
-        const p = calcShiftPay(s, emp); dayCost += p.totalPay; dayHours += p.workedHours;
+        const p = cachedShiftPay(s, emp); dayCost += p.totalPay; dayHours += p.workedHours;
       });
     });
     const { proj, trend, target } = getSalesSummary(date);
@@ -204,7 +216,7 @@ function renderGanttPanel(date) {
   let dayHours = 0, dayCost = 0;
   activeEmps.forEach(emp => {
     dayShifts.filter(s => s.employee_id === emp.id).forEach(s => {
-      const p = calcShiftPay(s, emp); dayHours += p.workedHours; dayCost += p.totalPay;
+      const p = cachedShiftPay(s, emp); dayHours += p.workedHours; dayCost += p.totalPay;
     });
   });
 
@@ -369,35 +381,58 @@ function buildUnassignedBar(shift) {
   `;
 }
 
-// ── Employee row ────────────────────────────────────
+// ── Employee rows — one row per shift, first row shows name ──────────────────
 function buildGanttRow(emp, date, empShifts) {
   const initials = ((emp.first_name?.[0]||'')+(emp.last_name?.[0]||'')).toUpperCase();
-  let rowHours = 0, rowCost = 0;
-  empShifts.forEach(s => { const p = calcShiftPay(s,emp); rowHours += p.workedHours; rowCost += p.totalPay; });
+  let totalHours = 0, totalCost = 0;
+  empShifts.forEach(s => { const p = cachedShiftPay(s,emp); totalHours += p.workedHours; totalCost += p.totalPay; });
 
-  return `
-    <div class="gantt-row" id="gantt-row-${emp.id}-${date}">
-      <div class="gantt-emp-col">
-        <div class="avatar" style="width:28px;height:28px;font-size:10px;flex-shrink:0;">${initials}</div>
-        <div style="min-width:0;flex:1;">
-          <div style="font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${emp.first_name} ${emp.last_name}</div>
-          <div style="font-size:10px;color:var(--text3);">${emp.employment_type||'casual'}${rowHours>0?` · ${rowHours.toFixed(1)}h · ${fmt(rowCost)}`:''}</div>
+  if (!empShifts.length) {
+    // Employee with no shifts — show row so they can drag to create
+    return `
+      <div class="gantt-row" id="gantt-row-${emp.id}-${date}">
+        <div class="gantt-emp-col">
+          <div class="avatar" style="width:28px;height:28px;font-size:10px;flex-shrink:0;">${initials}</div>
+          <div style="min-width:0;flex:1;">
+            <div style="font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${emp.first_name} ${emp.last_name}</div>
+            <div style="font-size:10px;color:var(--text3);">${emp.employment_type||'casual'}</div>
+          </div>
         </div>
-      </div>
-      <div class="gantt-track" data-emp="${emp.id}" data-date="${date}"
-        onmousedown="onTrackMouseDown(event,'${emp.id}','${date}')"
-        onclick="onTrackClick(event,'${emp.id}','${date}')">
-        ${empShifts.map(s => buildShiftBar(s, emp)).join('')}
-      </div>
-    </div>
-  `;
+        <div class="gantt-track" data-emp="${emp.id}" data-date="${date}"
+          onmousedown="onTrackMouseDown(event,'${emp.id}','${date}')"
+          onclick="onTrackClick(event,'${emp.id}','${date}')"></div>
+      </div>`;
+  }
+
+  // One row per shift — first row shows the employee name, subsequent rows are blank in the emp col
+  return empShifts.map((s, i) => {
+    const isFirst = i === 0;
+    const rowId   = isFirst ? `gantt-row-${emp.id}-${date}` : `gantt-row-${emp.id}-${date}-${s.id}`;
+    return `
+      <div class="gantt-row" id="${rowId}">
+        <div class="gantt-emp-col" style="${!isFirst ? 'padding-top:0;' : ''}">
+          ${isFirst ? `
+            <div class="avatar" style="width:28px;height:28px;font-size:10px;flex-shrink:0;">${initials}</div>
+            <div style="min-width:0;flex:1;">
+              <div style="font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${emp.first_name} ${emp.last_name}</div>
+              <div style="font-size:10px;color:var(--text3);">${emp.employment_type||'casual'}${totalHours>0?` · ${totalHours.toFixed(1)}h · ${fmt(totalCost)}`:''}</div>
+            </div>
+          ` : `<div style="flex:1;border-left:2px solid var(--border);margin-left:13px;height:100%;min-height:36px;"></div>`}
+        </div>
+        <div class="gantt-track" data-emp="${emp.id}" data-date="${date}"
+          onmousedown="onTrackMouseDown(event,'${emp.id}','${date}')"
+          onclick="onTrackClick(event,'${emp.id}','${date}')">
+          ${buildShiftBar(s, emp)}
+        </div>
+      </div>`;
+  }).join('');
 }
 
 function buildShiftBar(shift, emp) {
   const left  = timeToX(shift.start_time);
   const right = timeToX(shift.end_time);
   const width = Math.max(right - left, 1.5);
-  const pay   = calcShiftPay(shift, emp);
+  const pay   = cachedShiftPay(shift, emp);
   const bg    = { permanent:'var(--accent)', casual:'#4f8ef7', parttime:'#805ad5' }[emp.employment_type||'casual'] || '#4f8ef7';
   const slim  = width < 5;
 
@@ -527,21 +562,13 @@ async function assignShift(shiftId, empId) {
 
   // Refresh old employee row if reassigning
   if (oldEmpId) {
-    const oldEmp    = employees.find(e => e.id === oldEmpId);
-    const oldRowEl  = document.getElementById(`gantt-row-${oldEmpId}-${shift.date}`);
-    if (oldEmp && oldRowEl) {
-      const oldShifts = shifts.filter(s => s.employee_id === oldEmpId && s.date === shift.date && s.status !== 'cancelled');
-      oldRowEl.outerHTML = buildGanttRow(oldEmp, shift.date, oldShifts);
-    }
+    const oldEmp = employees.find(e => e.id === oldEmpId);
+    if (oldEmp) refreshEmpRows(oldEmp, shift.date);
   }
 
   // Refresh new employee row
-  const emp    = employees.find(e => e.id === empId);
-  const rowEl  = document.getElementById(`gantt-row-${empId}-${shift.date}`);
-  if (emp && rowEl) {
-    const empShifts = shifts.filter(s => s.employee_id === empId && s.date === shift.date && s.status !== 'cancelled');
-    rowEl.outerHTML = buildGanttRow(emp, shift.date, empShifts);
-  }
+  const emp = employees.find(e => e.id === empId);
+  if (emp) refreshEmpRows(emp, shift.date);
 
   refreshDayHeading(shift.date);
   renderDayTabs(getWeekDates(_currentWeekStart));
@@ -766,23 +793,49 @@ function onHandleMouseDown(e, shiftId, side) {
 //  REFRESH HELPERS
 // ══════════════════════════════════════════════════════
 
+// Refresh all gantt rows for a given employee on a date (handles one-row-per-shift)
+function refreshEmpRows(emp, date) {
+  const empShifts = shifts.filter(s => s.employee_id === emp.id && s.date === date && s.status !== 'cancelled');
+  const newHtml   = buildGanttRow(emp, date, empShifts);
+  const body = document.getElementById(`gantt-body-${date}`);
+  if (!body) return;
+  body.querySelectorAll(`[id^="gantt-row-${emp.id}-${date}"]`).forEach(el => el.remove());
+  const unassignedRow = document.getElementById(`gantt-row-unassigned-${date}`);
+  const ref = unassignedRow?.nextSibling || null;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = newHtml;
+  while (tmp.firstChild) body.insertBefore(tmp.firstChild, ref);
+}
+
 function refreshGanttRow(shiftId) {
   const shift = shifts.find(s => s.id === shiftId);
   if (!shift) return;
+  clearPayCache();
 
   if (!shift.employee_id) {
-    // Refresh unassigned row
     const rowEl = document.getElementById(`gantt-row-unassigned-${shift.date}`);
     if (rowEl) {
       const unassigned = shifts.filter(s => s.date === shift.date && !s.employee_id && s.status !== 'cancelled');
       rowEl.outerHTML = buildUnassignedRow(shift.date, unassigned);
     }
   } else {
-    const emp   = employees.find(e => e.id === shift.employee_id);
-    const rowEl = document.getElementById(`gantt-row-${shift.employee_id}-${shift.date}`);
-    if (emp && rowEl) {
-      const empShifts = shifts.filter(s => s.employee_id === shift.employee_id && s.date === shift.date && s.status !== 'cancelled');
-      rowEl.outerHTML = buildGanttRow(emp, shift.date, empShifts);
+    // With one-row-per-shift, remove ALL rows for this employee on this date
+    // then re-insert them after the first row's position
+    const emp = employees.find(e => e.id === shift.employee_id);
+    if (!emp) return;
+    const empShifts = shifts.filter(s => s.employee_id === emp.id && s.date === shift.date && s.status !== 'cancelled');
+    const newHtml   = buildGanttRow(emp, shift.date, empShifts);
+
+    // Remove all existing rows for this employee on this date
+    const body = document.getElementById(`gantt-body-${shift.date}`);
+    if (body) {
+      body.querySelectorAll(`[id^="gantt-row-${emp.id}-${shift.date}"]`).forEach(el => el.remove());
+      // Re-insert after the unassigned row
+      const unassignedRow = document.getElementById(`gantt-row-unassigned-${shift.date}`);
+      const ref = unassignedRow?.nextSibling || null;
+      const tmp = document.createElement('div');
+      tmp.innerHTML = newHtml;
+      while (tmp.firstChild) body.insertBefore(tmp.firstChild, ref);
     }
   }
 
@@ -963,15 +1016,10 @@ async function deleteShiftConfirm() {
   await dbDeleteShift(id);
   closeModal('shift-modal');
 
-  // Refresh just the affected row rather than the full panel
   if (date === _activeDay) {
     if (empId) {
-      const emp    = employees.find(e => e.id === empId);
-      const rowEl  = document.getElementById(`gantt-row-${empId}-${date}`);
-      if (emp && rowEl) {
-        const empShifts = shifts.filter(s => s.employee_id === empId && s.date === date && s.status !== 'cancelled');
-        rowEl.outerHTML = buildGanttRow(emp, date, empShifts);
-      }
+      const emp = employees.find(e => e.id === empId);
+      if (emp) refreshEmpRows(emp, date);
     } else {
       const rowEl = document.getElementById(`gantt-row-unassigned-${date}`);
       if (rowEl) {
