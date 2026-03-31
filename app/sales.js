@@ -62,7 +62,9 @@ async function dbLoadSalesRange(from, to) {
 
 async function dbSaveSale(date) {
   const d = salesData[date];
-  if (!d || !_businessId) return;
+  if (!d) return;
+  localStorage.setItem('wf_sales', JSON.stringify(salesData));
+  if (!_businessId) return;
   const { error } = await _supabase.from('sales_data').upsert({
     business_id: _businessId,
     date,
@@ -569,12 +571,20 @@ function liveSpchUpdate(date) {
 
 async function updateSales(date, field, value) {
   if (!salesData[date]) salesData[date] = {};
-  salesData[date][field] = value === '' ? null : parseFloat(value) || null;
+  // Use null for empty, but preserve 0 as a valid value
+  const parsed = value === '' || value === null ? null : parseFloat(value);
+  salesData[date][field] = (parsed === null || isNaN(parsed)) ? null : parsed;
   localStorage.setItem('wf_sales', JSON.stringify(salesData));
   await dbSaveSale(date);
   refreshRosterDaySpch(date);
-  // Refresh KPIs
   renderSalesKPIs(getWeekDates(_salesWeekStart));
+
+  // Rebuild just this card so has-override, diff line and SPCH all reflect the new value
+  const weekDates = getWeekDates(_salesWeekStart);
+  const today     = new Date().toISOString().split('T')[0];
+  const dayIdx    = weekDates.indexOf(date);
+  const card      = document.getElementById(`scard-${date}`);
+  if (card && dayIdx >= 0) card.outerHTML = buildSalesCard(date, dayIdx, today);
 }
 
 // ══════════════════════════════════════════════════════
