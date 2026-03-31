@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Tayla Workforce — Rostering, timesheets and payroll for Australian small business">
+<meta name="theme-color" content="#1a1a2e">
+<title>Tayla Workforce</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<!-- ══════════════════ AUTH OVERLAY ══════════════════ -->
+<div class="auth-overlay" id="auth-overlay">
+  <div class="auth-card">
+    <div class="auth-logo">Tayla <span>Workforce</span></div>
+    <div class="auth-sub">Rostering · Timesheets · Payroll</div>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" id="auth-email" placeholder="you@business.com.au" autocomplete="email"
+        onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="auth-password" placeholder="Password" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div id="auth-error" style="display:none;padding:10px 14px;background:#fde2e2;color:var(--danger);border-radius:8px;font-size:13px;margin-bottom:14px;"></div>
+    <button id="auth-btn" class="btn btn-primary" style="width:100%;margin-bottom:10px;" onclick="doLogin()">Sign In</button>
+    <button id="signup-btn" class="btn btn-ghost" style="width:100%;" onclick="doSignup()">Create Account</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SETUP OVERLAY ══════════════════ -->
+<div class="auth-overlay" id="setup-overlay" style="display:none;">
+  <div class="auth-card" style="max-width:480px;">
+    <div class="auth-logo">Tayla <span>Workforce</span></div>
+    <div class="auth-sub" style="margin-bottom:24px;">Set up your business to get started</div>
+    <div class="form-group">
+      <label>Business Name <span style="color:var(--danger);">*</span></label>
+      <input type="text" id="setup-biz-name" placeholder="e.g. Burger Palace Pty Ltd">
+    </div>
+    <div class="form-group">
+      <label>ABN</label>
+      <input type="text" id="setup-abn" placeholder="12 345 678 901" maxlength="14">
+    </div>
+    <div class="form-group">
+      <label>Industry Award</label>
+      <select id="setup-award">
+        <option value="ma000003">Fast Food Industry Award MA000003</option>
+        <option value="custom">Custom / Manual rates only</option>
+      </select>
+    </div>
+    <button class="btn btn-accent" style="width:100%;margin-top:8px;" onclick="saveBusinessSetup()">
+      🚀 Launch Tayla Workforce
+    </button>
+  </div>
+</div>
+
+<!-- ══════════════════ APP SHELL ══════════════════ -->
+<div id="app-shell" style="display:none;flex-direction:column;min-height:100vh;">
+
+  <!-- Header -->
+  <header>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div class="logo">Tayla <span>Workforce</span></div>
+      <span class="logo-sub" id="header-biz-name"></span>
+    </div>
+    <div class="header-actions">
+      <div style="position:relative;" id="user-menu-wrap">
+        <button class="btn btn-ghost" onclick="toggleUserMenu()" style="font-size:12px;color:#fff;border-color:rgba(255,255,255,.2);">
+          👤 <span id="header-user">Account</span>
+        </button>
+        <div id="user-dropdown" style="
+          display:none;position:absolute;top:calc(100% + 8px);right:0;
+          background:var(--surface);border:1px solid var(--border);border-radius:10px;
+          box-shadow:0 8px 24px rgba(26,26,46,.15);min-width:180px;z-index:9999;overflow:hidden;">
+          <div id="user-email-disp" style="padding:12px 16px;font-size:12px;color:var(--text3);border-bottom:1px solid var(--border);"></div>
+          <div onclick="signOut()" style="padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;color:var(--danger);" onmouseover="this.style.background='#fde2e2'" onmouseout="this.style.background=''">→ Sign Out</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Nav -->
+  <nav>
+    <div class="tab active" data-page="dashboard" onclick="showPage('dashboard')">📊 Dashboard</div>
+    <div class="tab" data-page="employees" onclick="showPage('employees')">👥 Employees</div>
+    <div class="tab" data-page="roster" onclick="showPage('roster')">📅 Roster</div>
+    <div class="tab" data-page="timesheets" onclick="showPage('timesheets')">⏱ Timesheets</div>
+  </nav>
+
+  <main>
+
+  <!-- ══════════════════ DASHBOARD ══════════════════ -->
+  <div id="dashboard" class="page active">
+    <div class="kpi-grid" id="dash-kpis"></div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;" class="responsive-2col">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Today's Shifts</span></div>
+        <div id="dash-today" style="min-height:80px;"></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Upcoming Public Holidays</span>
+          <span style="font-size:11px;color:var(--text3);">MA000003 · 250% rate</span>
+        </div>
+        <div id="dash-public-holidays"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════ EMPLOYEES ══════════════════ -->
+  <div id="employees" class="page">
+    <div class="kpi-grid" id="emp-kpis"></div>
+
+    <div class="card">
+      <div class="card-header flex-between">
+        <span class="card-title">Employees</span>
+        <button class="btn btn-primary btn-sm" onclick="openAddEmployee()">+ Add Employee</button>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Role</th>
+                <th>Rate</th>
+                <th>Start Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="emp-tbody"></tbody>
+          </table>
+        </div>
+        <div id="emp-empty" style="display:none;padding:48px;text-align:center;color:var(--text3);">
+          <div style="font-size:32px;margin-bottom:12px;">👥</div>
+          <div style="font-size:15px;font-weight:500;color:var(--text2);">No employees yet</div>
+          <button class="btn btn-primary mt" onclick="openAddEmployee()">+ Add First Employee</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════ ROSTER ══════════════════ -->
+  <div id="roster" class="page">
+    <div class="kpi-grid" id="roster-kpis"></div>
+
+    <div class="card">
+      <div class="card-header flex-between">
+        <span class="card-title">Weekly Roster</span>
+        <div class="week-nav">
+          <button onclick="weekNav(-1)">‹</button>
+          <span id="roster-week-label">—</span>
+          <button onclick="weekNav(1)">›</button>
+          <button class="btn btn-ghost btn-sm" onclick="goToCurrentWeek()">Today</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto;padding:0;">
+        <div class="roster-grid" id="roster-grid" style="min-width:800px;"></div>
+      </div>
+    </div>
+
+    <div style="font-size:12px;color:var(--text3);margin-top:8px;display:flex;gap:16px;flex-wrap:wrap;">
+      <span><span style="display:inline-block;width:12px;height:12px;background:var(--accent);border-radius:3px;margin-right:4px;"></span>Permanent</span>
+      <span><span style="display:inline-block;width:12px;height:12px;background:#4f8ef7;border-radius:3px;margin-right:4px;"></span>Casual</span>
+      <span><span style="display:inline-block;width:12px;height:12px;background:#805ad5;border-radius:3px;margin-right:4px;"></span>Part-time</span>
+      <span>Click a cell to add a shift · Click a shift to edit</span>
+    </div>
+  </div>
+
+  <!-- ══════════════════ TIMESHEETS ══════════════════ -->
+  <div id="timesheets" class="page">
+    <div class="kpi-grid" id="ts-kpis"></div>
+
+    <div class="card">
+      <div class="card-header flex-between">
+        <span class="card-title">Timesheets</span>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <div class="week-nav">
+            <button onclick="tsWeekNav(-1)">‹</button>
+            <span id="ts-week-label">—</span>
+            <button onclick="tsWeekNav(1)">›</button>
+          </div>
+          <button class="btn btn-success btn-sm" onclick="approveAllPending()">✓ Approve All Pending</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Employee</th>
+                <th>Date</th>
+                <th>Rostered</th>
+                <th>Actual Times</th>
+                <th>Hours</th>
+                <th>Pay</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="ts-tbody"></tbody>
+          </table>
+        </div>
+        <div id="ts-empty" style="display:none;padding:48px;text-align:center;color:var(--text3);">
+          <div style="font-size:32px;margin-bottom:12px;">⏱</div>
+          <div style="font-size:15px;font-weight:500;color:var(--text2);">No timesheets this week</div>
+          <div style="font-size:13px;margin-top:6px;">Timesheets are created from rostered shifts.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  </main>
+</div>
+
+<!-- ══════════════════ MODALS ══════════════════ -->
+
+<!-- Employee Modal -->
+<div class="modal-overlay" id="emp-modal">
+  <div class="modal" style="max-width:640px;">
+    <h3 id="emp-modal-title">Add Employee</h3>
+    <form id="emp-form" onsubmit="event.preventDefault();">
+      <input type="hidden" id="emp-edit-id">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>First Name <span style="color:var(--danger);">*</span></label>
+          <input type="text" id="emp-first-name" placeholder="e.g. Sarah">
+        </div>
+        <div class="form-group">
+          <label>Last Name <span style="color:var(--danger);">*</span></label>
+          <input type="text" id="emp-last-name" placeholder="e.g. Johnson">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="emp-email" placeholder="sarah@email.com">
+        </div>
+        <div class="form-group">
+          <label>Phone</label>
+          <input type="tel" id="emp-phone" placeholder="04xx xxx xxx">
+        </div>
+        <div class="form-group">
+          <label>Role / Position</label>
+          <input type="text" id="emp-role" placeholder="e.g. Crew Member, Supervisor">
+        </div>
+        <div class="form-group">
+          <label>Employment Type</label>
+          <select id="emp-type">
+            <option value="casual">Casual</option>
+            <option value="parttime">Part-time</option>
+            <option value="permanent">Permanent Full-time</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Hourly Rate ($) <span style="font-size:11px;color:var(--text3);font-weight:400;">Leave blank to use award rate</span></label>
+          <input type="number" id="emp-rate" step="0.01" min="0" placeholder="${AWARD_BASE_RATE}">
+        </div>
+        <div class="form-group">
+          <label>Age <span style="font-size:11px;color:var(--text3);font-weight:400;">For junior rates</span></label>
+          <input type="number" id="emp-age" min="15" max="100" placeholder="e.g. 17">
+        </div>
+        <div class="form-group">
+          <label>TFN</label>
+          <input type="text" id="emp-tfn" placeholder="Tax File Number">
+        </div>
+        <div class="form-group">
+          <label>Start Date</label>
+          <input type="date" id="emp-start-date">
+        </div>
+        <div class="form-group full">
+          <label>Super Fund</label>
+          <input type="text" id="emp-super-fund" placeholder="e.g. Australian Super">
+        </div>
+        <div class="form-group">
+          <label>Super Member Number</label>
+          <input type="text" id="emp-super-number" placeholder="Member number">
+        </div>
+        <div class="form-group">
+          <label>Status</label>
+          <select id="emp-active">
+            <option value="true">Active</option>
+            <option value="false">Inactive</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Bank BSB</label>
+          <input type="text" id="emp-bank-bsb" placeholder="062-000" maxlength="7">
+        </div>
+        <div class="form-group">
+          <label>Bank Account</label>
+          <input type="text" id="emp-bank-account" placeholder="12345678">
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
+        <input type="checkbox" id="emp-laundry" style="width:auto;margin:0;">
+        <label for="emp-laundry" style="font-size:13px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text2);">
+          Laundry allowance ($1.25/day — employee required to wear uniform)
+        </label>
+      </div>
+      <div class="flex-gap" style="justify-content:flex-end;">
+        <button type="button" class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="closeModal('emp-modal')">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveEmployee()">Save Employee</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Shift Modal -->
+<div class="modal-overlay" id="shift-modal">
+  <div class="modal">
+    <h3 id="shift-modal-title">Add Shift</h3>
+    <input type="hidden" id="shift-edit-id">
+    <div class="form-grid">
+      <div class="form-group full">
+        <label>Employee</label>
+        <select id="shift-employee" onchange="updateShiftPreview()">
+          <option value="">Select employee…</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" id="shift-date" onchange="updateShiftPreview()">
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select id="shift-status">
+          <option value="draft">Draft</option>
+          <option value="published">Published</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Start Time</label>
+        <input type="time" id="shift-start" onchange="updateShiftPreview()">
+      </div>
+      <div class="form-group">
+        <label>End Time</label>
+        <input type="time" id="shift-end" onchange="updateShiftPreview()">
+      </div>
+      <div class="form-group full">
+        <label>Break (minutes) <span style="font-size:11px;color:var(--text3);font-weight:400;">Auto-calculated if left blank</span></label>
+        <input type="number" id="shift-break" min="0" max="120" placeholder="Auto" oninput="updateShiftPreview()">
+      </div>
+      <div class="form-group full">
+        <label>Notes</label>
+        <input type="text" id="shift-notes" placeholder="Optional shift notes">
+      </div>
+    </div>
+    <div id="shift-pay-preview"></div>
+    <div class="flex-gap" style="justify-content:flex-end;margin-top:20px;">
+      <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="deleteShiftConfirm()" id="shift-delete-btn">Delete</button>
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="closeModal('shift-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveShift()">Save Shift</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script src="awards.js"></script>
+<script src="employees.js"></script>
+<script src="roster.js"></script>
+<script src="timesheets.js"></script>
+<script src="app.js"></script>
+<script>
+  // Populate shift employee select when modal opens
+  document.getElementById('shift-modal').addEventListener('transitionend', populateShiftEmployeeSelect);
+
+  // Show user email in dropdown
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+      if (_currentUser?.email) {
+        const el = document.getElementById('user-email-disp');
+        if (el) el.textContent = _currentUser.email;
+      }
+    }, 1000);
+  });
+</script>
+</body>
+</html>
