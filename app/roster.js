@@ -847,6 +847,8 @@ async function openAddShift(employeeId, date, startTime, endTime) {
   document.getElementById('shift-status').value   = 'published';
   populateShiftEmployeeSelect();
   updateShiftPreview();
+  const delBtn = document.getElementById('shift-delete-btn');
+  if (delBtn) delBtn.style.display = 'none';
   document.getElementById('shift-modal').classList.add('show');
 }
 
@@ -864,6 +866,8 @@ function openEditShift(shiftId) {
   document.getElementById('shift-status').value    = s.status || 'published';
   populateShiftEmployeeSelect();
   updateShiftPreview();
+  const delBtn = document.getElementById('shift-delete-btn');
+  if (delBtn) delBtn.style.display = '';
   document.getElementById('shift-modal').classList.add('show');
 }
 
@@ -929,12 +933,33 @@ async function saveShift() {
 }
 
 async function deleteShiftConfirm() {
-  const id   = document.getElementById('shift-edit-id').value;
+  const id = document.getElementById('shift-edit-id').value;
   if (!id || !confirm('Delete this shift?')) return;
-  const date = shifts.find(s => s.id === id)?.date;
+  const shift = shifts.find(s => s.id === id);
+  const date  = shift?.date;
+  const empId = shift?.employee_id;
   await dbDeleteShift(id);
   closeModal('shift-modal');
-  if (date === _activeDay) renderGanttPanel(date);
+
+  // Refresh just the affected row rather than the full panel
+  if (date === _activeDay) {
+    if (empId) {
+      const emp    = employees.find(e => e.id === empId);
+      const rowEl  = document.getElementById(`gantt-row-${empId}-${date}`);
+      if (emp && rowEl) {
+        const empShifts = shifts.filter(s => s.employee_id === empId && s.date === date && s.status !== 'cancelled');
+        rowEl.outerHTML = buildGanttRow(emp, date, empShifts);
+      }
+    } else {
+      const rowEl = document.getElementById(`gantt-row-unassigned-${date}`);
+      if (rowEl) {
+        const unassigned = shifts.filter(s => s.date === date && !s.employee_id && s.status !== 'cancelled');
+        rowEl.outerHTML = buildUnassignedRow(date, unassigned);
+      }
+    }
+    refreshDayHeading(date);
+  }
+
   renderDayTabs(getWeekDates(_currentWeekStart));
   renderRosterKPIs(getWeekDates(_currentWeekStart));
   toast('Shift deleted');
