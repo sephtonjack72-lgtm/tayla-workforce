@@ -112,8 +112,9 @@ function applyProfile(profile) {
   const userEl = document.getElementById('header-user');
   if (userEl) userEl.textContent = _currentUser?.email?.split('@')[0] || 'Account';
 
-  // Load all data
-  dbLoadEmployees().then(() => {
+  // Load all data — Promise.resolve handles cases where dbLoadEmployees
+  // returns undefined (no _businessId yet) so renders always fire
+  Promise.resolve(dbLoadEmployees()).then(() => {
     renderEmployees();
     renderRoster();
     renderSales();
