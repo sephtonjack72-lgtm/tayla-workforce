@@ -99,7 +99,7 @@ function renderRoster() {
     label.textContent = `${s.toLocaleDateString('en-AU',{day:'numeric',month:'short'})} — ${e.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}`;
   }
 
-  dbLoadShifts(_currentWeekStart, weekEnd).then(() => {
+  Promise.resolve(dbLoadShifts(_currentWeekStart, weekEnd)).then(() => {
     renderRosterKPIs(weekDates);
     renderDayTabs(weekDates);
     renderGanttPanel(_activeDay);
@@ -796,7 +796,46 @@ function refreshRosterDaySpch(date) {
 //  SHIFT MODAL
 // ══════════════════════════════════════════════════════
 
-function openAddShift(employeeId, date, startTime, endTime) {
+async function openAddShift(employeeId, date, startTime, endTime) {
+  // If called from the "+ Add Shift" button (no employee), instantly drop an
+  // unassigned bar onto the gantt and open the assign popover — no modal needed.
+  if (!employeeId) {
+    const targetDate = date || _activeDay;
+    const shift = {
+      id:          uid(),
+      employee_id: null,
+      date:        targetDate,
+      start_time:  startTime || '09:00',
+      end_time:    endTime   || '17:00',
+      break_mins:  null,
+      notes:       '',
+      status:      'published',
+    };
+    await dbSaveShift(shift);
+
+    // Refresh unassigned row (or full panel if row doesn't exist yet)
+    const unassignedRowEl = document.getElementById(`gantt-row-unassigned-${targetDate}`);
+    if (unassignedRowEl) {
+      const unassigned = shifts.filter(s => s.date === targetDate && !s.employee_id && s.status !== 'cancelled');
+      unassignedRowEl.outerHTML = buildUnassignedRow(targetDate, unassigned);
+    } else {
+      renderGanttPanel(targetDate);
+    }
+
+    renderDayTabs(getWeekDates(_currentWeekStart));
+    renderRosterKPIs(getWeekDates(_currentWeekStart));
+
+    // Immediately open the assign popover on the new bar
+    setTimeout(() => {
+      const barEl = document.getElementById(`bar-${shift.id}`);
+      if (barEl) openAssignPopover(shift.id, barEl);
+    }, 50);
+
+    toast('Unassigned shift added — assign to an employee below');
+    return;
+  }
+
+  // Called from drag-create with a specific employee — open the modal as before
   document.getElementById('shift-modal-title').textContent = 'Add Shift';
   document.getElementById('shift-edit-id').value  = '';
   document.getElementById('shift-employee').value = employeeId || '';
