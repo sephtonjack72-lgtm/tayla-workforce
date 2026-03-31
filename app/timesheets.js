@@ -56,7 +56,7 @@ function renderTimesheets() {
   const weekDates = getWeekDates(_tsWeekStart);
   const weekEnd   = weekDates[6];
 
-  dbLoadTimesheets(_tsWeekStart, weekEnd).then(() => renderTimesheetTable(weekDates));
+  Promise.resolve(dbLoadTimesheets(_tsWeekStart, weekEnd)).then(() => renderTimesheetTable(weekDates));
 
   const label = document.getElementById('ts-week-label');
   if (label) {
