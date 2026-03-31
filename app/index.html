@@ -88,6 +88,7 @@
     <div class="tab active" data-page="dashboard" onclick="showPage('dashboard')">📊 Dashboard</div>
     <div class="tab" data-page="employees" onclick="showPage('employees')">👥 Employees</div>
     <div class="tab" data-page="roster" onclick="showPage('roster')">📅 Roster</div>
+    <div class="tab" data-page="sales" onclick="showPage('sales')">💰 Sales Projections</div>
     <div class="tab" data-page="timesheets" onclick="showPage('timesheets')">⏱ Timesheets</div>
   </nav>
 
@@ -150,7 +151,7 @@
   <div id="roster" class="page">
     <div class="kpi-grid" id="roster-kpis"></div>
 
-    <div class="card">
+    <div class="card" style="margin-bottom:12px;">
       <div class="card-header flex-between">
         <span class="card-title">Weekly Roster</span>
         <div class="week-nav">
@@ -160,16 +161,37 @@
           <button class="btn btn-ghost btn-sm" onclick="goToCurrentWeek()">Today</button>
         </div>
       </div>
-      <div style="overflow-x:auto;padding:0;">
-        <div class="roster-grid" id="roster-grid" style="min-width:800px;"></div>
-      </div>
     </div>
 
-    <div style="font-size:12px;color:var(--text3);margin-top:8px;display:flex;gap:16px;flex-wrap:wrap;">
+    <div id="roster-accordion"></div>
+
+    <div style="font-size:12px;color:var(--text3);margin-top:10px;display:flex;gap:16px;flex-wrap:wrap;">
       <span><span style="display:inline-block;width:12px;height:12px;background:var(--accent);border-radius:3px;margin-right:4px;"></span>Permanent</span>
       <span><span style="display:inline-block;width:12px;height:12px;background:#4f8ef7;border-radius:3px;margin-right:4px;"></span>Casual</span>
       <span><span style="display:inline-block;width:12px;height:12px;background:#805ad5;border-radius:3px;margin-right:4px;"></span>Part-time</span>
-      <span>Click a cell to add a shift · Click a shift to edit</span>
+      <span>Drag bars to move · Drag edges to resize · Click track to add</span>
+    </div>
+  </div>
+
+  <!-- ══════════════════ SALES PROJECTIONS ══════════════════ -->
+  <div id="sales" class="page">
+    <div class="kpi-grid" id="sales-kpis"></div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header flex-between">
+        <span class="card-title">Sales Projections</span>
+        <div class="week-nav">
+          <button onclick="salesWeekNav(-1)">‹</button>
+          <span id="sales-week-label">—</span>
+          <button onclick="salesWeekNav(1)">›</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sales-grid" id="sales-grid"></div>
+
+    <div style="font-size:12px;color:var(--text3);margin-top:12px;">
+      Trend figures auto-calculated from last 8 weeks · SPCH = Sales ÷ Rostered Crew Hours · Labour % = Labour Cost ÷ Projected Sales
     </div>
   </div>
 
@@ -365,6 +387,7 @@
 
 <script src="awards.js"></script>
 <script src="employees.js"></script>
+<script src="sales.js"></script>
 <script src="roster.js"></script>
 <script src="timesheets.js"></script>
 <script src="app.js"></script>
