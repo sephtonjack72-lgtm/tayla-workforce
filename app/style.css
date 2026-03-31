@@ -974,3 +974,121 @@ tr:hover td { background: var(--surface2); }
   justify-content: space-between;
   padding: 12px 0 8px;
 }
+
+/* ══════════════════════════════════════════════════════
+   Roster — Unassigned row + Assign popover
+══════════════════════════════════════════════════════ */
+
+/* Unassigned row */
+.gantt-row-unassigned {
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 8px,
+    rgba(26,26,46,.018) 8px,
+    rgba(26,26,46,.018) 16px
+  );
+  border-bottom: 2px solid var(--border) !important;
+}
+.gantt-row-unassigned:hover { background: rgba(232,197,71,.05); }
+
+.gantt-emp-unassigned {
+  background: var(--surface2) !important;
+  border-right: 2px dashed var(--border) !important;
+}
+
+.unassigned-icon {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--surface2);
+  border: 2px dashed var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: var(--text3); font-weight: 700;
+  flex-shrink: 0;
+}
+
+.gantt-track-unassigned {
+  cursor: crosshair;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent calc(100% / 20 - 1px),
+    rgba(26,26,46,.04) calc(100% / 20 - 1px),
+    rgba(26,26,46,.04) calc(100% / 20)
+  );
+}
+
+/* Unassigned shift bar */
+.shift-bar-unassigned {
+  background: transparent !important;
+  border: 2px dashed #d69e2e !important;
+  background-color: rgba(214,158,46,.12) !important;
+  cursor: pointer !important;
+}
+.shift-bar-unassigned .shift-bar-label { color: #856404 !important; font-weight: 700; }
+.shift-bar-unassigned:hover {
+  background-color: rgba(214,158,46,.22) !important;
+  box-shadow: 0 2px 12px rgba(214,158,46,.3) !important;
+}
+
+/* Ghost bar variant for unassigned track */
+.ghost-bar-unassigned {
+  background: rgba(214,158,46,.2) !important;
+  border: 2px dashed #d69e2e !important;
+}
+
+/* Unassigned dot on day tab */
+.unassigned-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--warning); flex-shrink: 0;
+}
+
+/* Assign popover */
+.assign-popover {
+  position: fixed;
+  width: 280px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 16px 48px rgba(26,26,46,.2);
+  z-index: 9999;
+  overflow: hidden;
+  animation: popIn .12s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes popIn {
+  from { opacity:0; transform: scale(.94) translateY(-4px); }
+  to   { opacity:1; transform: scale(1)   translateY(0); }
+}
+
+.assign-popover-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+.assign-popover-close {
+  background: none; border: none; cursor: pointer;
+  font-size: 14px; color: var(--text3); padding: 2px 4px;
+  border-radius: 4px; line-height: 1;
+}
+.assign-popover-close:hover { background: var(--border); color: var(--text); }
+
+.assign-emp-list {
+  max-height: 260px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.assign-emp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background .1s;
+  border-bottom: 1px solid var(--border);
+}
+.assign-emp-row:last-child { border-bottom: none; }
+.assign-emp-row:hover { background: var(--surface2); }
+.assign-emp-row.assigned { background: rgba(56,161,105,.06); }
