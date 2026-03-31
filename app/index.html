@@ -151,7 +151,7 @@
   <div id="roster" class="page">
     <div class="kpi-grid" id="roster-kpis"></div>
 
-    <div class="card" style="margin-bottom:12px;">
+    <div class="card" style="margin-bottom:0;border-radius:12px 12px 0 0;border-bottom:none;">
       <div class="card-header flex-between">
         <span class="card-title">Weekly Roster</span>
         <div class="week-nav">
@@ -161,15 +161,16 @@
           <button class="btn btn-ghost btn-sm" onclick="goToCurrentWeek()">Today</button>
         </div>
       </div>
+      <div class="roster-day-tabs" id="roster-day-tabs"></div>
     </div>
 
-    <div id="roster-accordion"></div>
+    <div class="roster-gantt-panel" id="roster-gantt-panel" style="overflow-x:auto;"></div>
 
-    <div style="font-size:12px;color:var(--text3);margin-top:10px;display:flex;gap:16px;flex-wrap:wrap;">
+    <div style="font-size:12px;color:var(--text3);margin-top:8px;display:flex;gap:16px;flex-wrap:wrap;">
       <span><span style="display:inline-block;width:12px;height:12px;background:var(--accent);border-radius:3px;margin-right:4px;"></span>Permanent</span>
       <span><span style="display:inline-block;width:12px;height:12px;background:#4f8ef7;border-radius:3px;margin-right:4px;"></span>Casual</span>
       <span><span style="display:inline-block;width:12px;height:12px;background:#805ad5;border-radius:3px;margin-right:4px;"></span>Part-time</span>
-      <span>Drag bars to move · Drag edges to resize · Click track to add</span>
+      <span>Drag to create · Drag bar to move · Drag edges to resize</span>
     </div>
   </div>
 
