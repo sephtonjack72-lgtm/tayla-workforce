@@ -315,7 +315,7 @@ function buildSalesCard(date, dayIdx, today) {
               onchange="updateSales('${date}','projected',this.value)"
               oninput="liveSpchUpdate('${date}')">
           </div>
-          ${proj!=null && trend ? `<div style="font-size:10px;color:var(--text3);margin-top:3px;">Trend ${fmt(trend)} · Manual ${fmt(proj)} · Diff <span style="color:${proj>trend?'var(--success)':'var(--danger)}"}>${proj>trend?'+':''}${fmt(proj-trend)}</span></div>` : ''}
+          ${proj!=null && trend ? `<div style="font-size:10px;color:var(--text3);margin-top:3px;">Trend ${fmt(trend)} · Manual ${fmt(proj)} · Diff <span style="color:${proj>trend?'var(--success)':'var(--danger)'}">${proj>trend?'+':''}${fmt(proj-trend)}</span></div>` : ''}
         </div>
 
         <!-- Actual -->
