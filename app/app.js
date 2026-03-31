@@ -116,6 +116,7 @@ function applyProfile(profile) {
   dbLoadEmployees().then(() => {
     renderEmployees();
     renderRoster();
+    renderSales();
     renderTimesheets();
     renderDashboard();
   });
@@ -162,6 +163,7 @@ function showPage(id) {
   if (id === 'dashboard')   renderDashboard();
   if (id === 'employees')   renderEmployees();
   if (id === 'roster')      renderRoster();
+  if (id === 'sales')       renderSales();
   if (id === 'timesheets')  renderTimesheets();
 }
 
