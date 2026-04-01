@@ -1092,3 +1092,66 @@ tr:hover td { background: var(--surface2); }
 .assign-emp-row:last-child { border-bottom: none; }
 .assign-emp-row:hover { background: var(--surface2); }
 .assign-emp-row.assigned { background: rgba(56,161,105,.06); }
+
+/* ══════════════════════════════════════════════════════
+   Sales — Split trend/manual fields
+══════════════════════════════════════════════════════ */
+
+/* Auto trend read-only display */
+.trend-readonly-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  border: 1.5px solid var(--border);
+}
+.trend-readonly-display.has-trend {
+  background: rgba(79,142,247,.06);
+  border-color: rgba(79,142,247,.25);
+}
+.trend-readonly-display.no-trend {
+  background: var(--surface2);
+}
+.trend-readonly-value {
+  font-family: 'DM Mono', monospace;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--accent3);
+}
+.trend-readonly-label {
+  font-size: 10px;
+  color: var(--text3);
+  text-align: right;
+}
+
+/* Using indicator */
+.using-indicator {
+  margin: -4px 0 2px;
+  min-height: 22px;
+}
+.using-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: 'DM Mono', monospace;
+  letter-spacing: .2px;
+}
+.using-manual {
+  background: rgba(56,161,105,.12);
+  color: var(--success);
+}
+.using-trend {
+  background: rgba(79,142,247,.12);
+  color: var(--accent3);
+}
+.using-none {
+  background: var(--surface2);
+  color: var(--text3);
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+}
