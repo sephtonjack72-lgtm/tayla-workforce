@@ -62,9 +62,7 @@ async function dbLoadSalesRange(from, to) {
 
 async function dbSaveSale(date) {
   const d = salesData[date];
-  if (!d) return;
-  localStorage.setItem('wf_sales', JSON.stringify(salesData));
-  if (!_businessId) return;
+  if (!d || !_businessId) return;
   const { error } = await _supabase.from('sales_data').upsert({
     business_id: _businessId,
     date,
@@ -197,7 +195,7 @@ function renderSales() {
     return d.toISOString().split('T')[0];
   })();
 
-  Promise.resolve(dbLoadSalesRange(histStart, weekEnd)).then(() => {
+  dbLoadSalesRange(histStart, weekEnd).then(() => {
     renderSalesKPIs(weekDates);
     renderSalesCards(weekDates);
     if (_historyOpen) renderHistoryTable();
@@ -303,21 +301,46 @@ function buildSalesCard(date, dayIdx, today) {
       <!-- Fields -->
       <div class="sales-fields">
 
-        <!-- Projected -->
+        <!-- AUTO TREND — read-only display -->
+        <div class="sales-field-row">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+            <label>Auto Trend</label>
+            <button class="trend-source-btn ${isCustom?'custom':''}" style="padding:3px 10px;font-size:10px;" onclick="toggleTrendPicker('${date}')">
+              ${isCustom?'⚙ Custom':'📈 52wk'} ${pickerOpen?'▴':'▾'}
+            </button>
+          </div>
+          <div class="trend-readonly-display ${trend?'has-trend':'no-trend'}">
+            ${trend
+              ? `<span class="trend-readonly-value">${fmt(trend)}</span><span class="trend-readonly-label">weighted avg · ${getSameDayHistory(date).length}wk data</span>`
+              : `<span class="trend-readonly-label" style="color:var(--text3);">No historical data yet — enter actuals to build trend</span>`
+            }
+          </div>
+        </div>
+
+        <!-- MANUAL PROJECTION — always a separate input -->
         <div class="sales-field-row">
           <div style="display:flex;justify-content:space-between;align-items:center;">
-            <label>Projected Sales</label>
-            ${trend ? `<span class="trend-chip" style="${proj!=null?'opacity:.5;':''}" title="Auto trend from same weekday history">Trend: ${fmt(trend)}</span>` : ''}
+            <label>Manual Projection</label>
+            ${proj!=null && trend ? `<span style="font-size:10px;color:${proj>trend?'var(--success)':'var(--danger)'};">${proj>trend?'▲':'▼'} ${Math.abs(((proj-trend)/trend)*100).toFixed(0)}% vs trend</span>` : ''}
           </div>
           <div style="position:relative;">
             <span class="field-prefix">$</span>
             <input type="number" class="sales-input ${proj!=null?'has-override':''}"
-              placeholder="${trend??'Enter amount'}"
+              placeholder="${trend ? `Leave blank to use trend (${fmt(trend)})` : 'Enter projected sales'}"
               value="${proj??''}" min="0" step="10"
               onchange="updateSales('${date}','projected',this.value)"
               oninput="liveSpchUpdate('${date}')">
           </div>
-          ${proj!=null && trend ? `<div style="font-size:10px;color:var(--text3);margin-top:3px;">Trend ${fmt(trend)} · Manual ${fmt(proj)} · Diff <span style="color:${proj>trend?'var(--success)':'var(--danger)'}">${proj>trend?'+':''}${fmt(proj-trend)}</span></div>` : ''}
+        </div>
+
+        <!-- USING indicator -->
+        <div id="using-indicator-${date}" class="using-indicator">
+          ${proj!=null
+            ? `<span class="using-pill using-manual">Using: Manual ${fmt(proj)}</span>`
+            : trend
+              ? `<span class="using-pill using-trend">Using: Trend ${fmt(trend)}</span>`
+              : `<span class="using-pill using-none">No projection — enter a manual figure above</span>`
+          }
         </div>
 
         <!-- Actual -->
@@ -343,14 +366,6 @@ function buildSalesCard(date, dayIdx, today) {
               onchange="updateSales('${date}','target_spch',this.value)"
               oninput="liveSpchUpdate('${date}')">
           </div>
-        </div>
-
-        <!-- Trend source -->
-        <div class="sales-field-row">
-          <label>Trend Source</label>
-          <button class="trend-source-btn ${isCustom?'custom':''}" onclick="toggleTrendPicker('${date}')">
-            ${isCustom?'⚙':'📈'} ${trendLabel} ${pickerOpen?'▴':'▾'}
-          </button>
         </div>
       </div>
 
@@ -560,6 +575,14 @@ function liveSpchUpdate(date) {
     ${spch&&target?`<div style="font-size:10px;color:${spchCol};">${spch>=target?'▲':'▼'} vs $${target} target</div>`:''}
   `;
 
+  // Using indicator
+  const usingEl = document.getElementById(`using-indicator-${date}`);
+  if (usingEl) usingEl.innerHTML = proj!=null
+    ? `<span class="using-pill using-manual">Using: Manual ${fmt(proj)}</span>`
+    : trend
+      ? `<span class="using-pill using-trend">Using: Trend ${fmt(trend)}</span>`
+      : `<span class="using-pill using-none">No projection — enter a manual figure above</span>`;
+
   // Footer
   const footer = document.getElementById(`sfooter-${date}`);
   if (footer) footer.innerHTML = buildSalesFooter(crewHours, labourCost, effProj, target, labourPct);
@@ -571,20 +594,12 @@ function liveSpchUpdate(date) {
 
 async function updateSales(date, field, value) {
   if (!salesData[date]) salesData[date] = {};
-  // Use null for empty, but preserve 0 as a valid value
-  const parsed = value === '' || value === null ? null : parseFloat(value);
-  salesData[date][field] = (parsed === null || isNaN(parsed)) ? null : parsed;
+  salesData[date][field] = value === '' ? null : parseFloat(value) || null;
   localStorage.setItem('wf_sales', JSON.stringify(salesData));
   await dbSaveSale(date);
   refreshRosterDaySpch(date);
+  // Refresh KPIs
   renderSalesKPIs(getWeekDates(_salesWeekStart));
-
-  // Rebuild just this card so has-override, diff line and SPCH all reflect the new value
-  const weekDates = getWeekDates(_salesWeekStart);
-  const today     = new Date().toISOString().split('T')[0];
-  const dayIdx    = weekDates.indexOf(date);
-  const card      = document.getElementById(`scard-${date}`);
-  if (card && dayIdx >= 0) card.outerHTML = buildSalesCard(date, dayIdx, today);
 }
 
 // ══════════════════════════════════════════════════════
