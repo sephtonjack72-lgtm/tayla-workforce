@@ -251,6 +251,22 @@ function renderDashboard() {
   }
 }
 
+// Jump to Sales Projections tab and open the correct day
+function goToSalesProjection(date) {
+  showPage('sales');
+  // Set the sales week to match this date's week, then switch to the day
+  if (typeof _salesWeekStart !== 'undefined') {
+    const weekDates = getWeekDates(getWeekStart(date));
+    if (!weekDates.includes(date)) return;
+    _salesWeekStart = getWeekStart(date);
+  }
+  if (typeof renderSales === 'function') renderSales();
+  // Small delay so the tab renders before we try to click it
+  setTimeout(() => {
+    if (typeof switchSalesDay === 'function') switchSalesDay(date);
+  }, 80);
+}
+
 // ══════════════════════════════════════════════════════
 //  UTILS
 // ══════════════════════════════════════════════════════
