@@ -85,6 +85,11 @@ function renderEmployees() {
         <td>
           <div class="flex-gap">
             <button class="btn btn-ghost btn-sm" onclick="openEditEmployee('${e.id}')">Edit</button>
+            <button class="btn btn-ghost btn-sm" onclick="openInviteModal('${e.id}')" title="Invite to Tayla Workforce app">
+              ${e.tayla_user_id
+                ? '<span style="color:var(--success);">✓ Connected</span>'
+                : '📲 Invite'}
+            </button>
             <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="deleteEmployeeConfirm('${e.id}')">Remove</button>
           </div>
         </td>
@@ -197,4 +202,103 @@ function toast(msg, duration = 3000) {
   el.textContent = msg;
   el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), duration);
+}
+
+// ══════════════════════════════════════════════════════
+//  TAYLA INVITE
+// ══════════════════════════════════════════════════════
+
+let _inviteEmployeeId = null;
+
+function openInviteModal(empId) {
+  const emp = employees.find(e => e.id === empId);
+  if (!emp) return;
+  _inviteEmployeeId = empId;
+
+  const modal = document.getElementById('invite-modal');
+  if (!modal) return;
+
+  document.getElementById('invite-emp-name').textContent  = `${emp.first_name} ${emp.last_name}`;
+  document.getElementById('invite-emp-email').textContent = emp.email || '(no email on file)';
+  document.getElementById('invite-status-area').innerHTML = '';
+  document.getElementById('invite-send-btn').style.display = emp.tayla_user_id ? 'none' : 'inline-flex';
+
+  // Show connection status if already connected
+  if (emp.tayla_user_id) {
+    document.getElementById('invite-status-area').innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(56,161,105,.08);border-radius:8px;border:1px solid rgba(56,161,105,.2);">
+        <span style="font-size:20px;">✓</span>
+        <div>
+          <div style="font-weight:600;font-size:13px;color:var(--success);">Connected to Tayla</div>
+          <div style="font-size:11px;color:var(--text3);">This employee has accepted their invite and connected their Tayla account.</div>
+        </div>
+      </div>`;
+  } else if (!emp.email) {
+    document.getElementById('invite-status-area').innerHTML = `
+      <div style="padding:10px 14px;background:#fde2e2;border-radius:8px;font-size:12px;color:var(--danger);">
+        ⚠ No email address on file. Add one in Edit Employee before sending an invite.
+      </div>`;
+    document.getElementById('invite-send-btn').style.display = 'none';
+  }
+
+  modal.classList.add('show');
+}
+
+async function sendTaylaInvite() {
+  const emp = employees.find(e => e.id === _inviteEmployeeId);
+  if (!emp || !_businessId) return;
+
+  const btn       = document.getElementById('invite-send-btn');
+  const statusEl  = document.getElementById('invite-status-area');
+  btn.textContent = 'Sending…';
+  btn.disabled    = true;
+
+  try {
+    const { data: { session } } = await _supabase.auth.getSession();
+    const token = session?.access_token;
+
+    const res  = await fetch(
+      'https://whedwekxzjfqwjuoarid.supabase.co/functions/v1/send-invite',
+      {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          employee_id: emp.id,
+          business_id: _businessId,
+        }),
+      }
+    );
+
+    const data = await res.json();
+
+    if (!res.ok || data.error) throw new Error(data.error || 'Failed to send invite');
+
+    if (data.email_sent) {
+      statusEl.innerHTML = `
+        <div style="padding:12px 14px;background:rgba(56,161,105,.08);border-radius:8px;border:1px solid rgba(56,161,105,.2);font-size:13px;color:var(--success);">
+          ✓ Invite sent to <strong>${emp.email}</strong>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px;">Link expires in 7 days.</div>
+        </div>`;
+    } else {
+      // No Resend key — show manual URL
+      statusEl.innerHTML = `
+        <div style="padding:12px 14px;background:rgba(232,197,71,.1);border-radius:8px;border:1px solid var(--accent2);font-size:12px;">
+          <div style="font-weight:600;margin-bottom:6px;">⚠ Email not sent — copy this link manually:</div>
+          <div style="font-family:'DM Mono',monospace;font-size:11px;word-break:break-all;color:var(--text2);background:var(--bg);padding:8px;border-radius:6px;">
+            ${data.invite_url}
+          </div>
+          <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="navigator.clipboard.writeText('${data.invite_url}').then(()=>toast('Link copied ✓'))">Copy Link</button>
+        </div>`;
+    }
+    btn.style.display = 'none';
+    toast(`Invite created for ${emp.first_name} ✓`);
+
+  } catch (err) {
+    statusEl.innerHTML = `<div style="padding:10px 14px;background:#fde2e2;border-radius:8px;font-size:12px;color:var(--danger);">⚠ ${err.message}</div>`;
+    btn.textContent = '📲 Send Invite';
+    btn.disabled    = false;
+  }
 }
