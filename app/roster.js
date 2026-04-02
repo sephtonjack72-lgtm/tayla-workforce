@@ -177,14 +177,16 @@ function renderDayTabs(weekDates) {
     const displaySales = proj;
     const spch    = displaySales && dayHours ? Math.round(displaySales / dayHours) : null;
     const spchCol = spch && target ? spchColour(spch, target) : 'var(--text3)';
+    const noProj  = !proj;
 
     return `
-      <div class="day-tab ${isActive?'active':''} ${isToday?'today':''}" data-date="${date}" onclick="switchDay('${date}')">
+      <div class="day-tab ${isActive?'active':''} ${isToday?'today':''} ${noProj?'no-proj':''}" data-date="${date}" onclick="switchDay('${date}')">
         <div class="day-tab-top">
           <span class="day-tab-name">${DAY_SHORT[i]}</span>
           ${isToday    ? '<span class="today-dot"></span>' : ''}
           ${isPH       ? '<span class="ph-tag">PH</span>' : ''}
           ${unassigned ? `<span class="unassigned-dot" title="${unassigned} unassigned"></span>` : ''}
+          ${noProj     ? '<span class="no-proj-dot" title="No projection entered"></span>' : ''}
         </div>
         <div class="day-tab-date">${d.getDate()}/${d.getMonth()+1}</div>
         <div class="day-tab-meta">
@@ -192,7 +194,8 @@ function renderDayTabs(weekDates) {
           ${dayHours > 0 ? `<span>${dayHours.toFixed(1)}h</span>` : ''}
         </div>
         ${dayCost > 0 ? `<div class="day-tab-cost">${fmt(dayCost)}</div>` : ''}
-        ${spch ? `<div class="day-tab-spch" style="color:${spchCol};">$${spch}/h</div>` : ''}
+        ${noProj ? `<div class="day-tab-no-proj">No projection</div>` : ''}
+        ${spch   ? `<div class="day-tab-spch" style="color:${spchCol};">$${spch}/h</div>` : ''}
       </div>
     `;
   }).join('');
@@ -227,6 +230,7 @@ function renderGanttPanel(date) {
   const spchCol = spch && target ? spchColour(parseFloat(spch), target) : 'var(--text2)';
   const isPH    = isPublicHoliday(date);
   const d       = new Date(date);
+  const noProj  = !proj;
 
   panel.innerHTML = `
     <div class="gantt-day-heading">
@@ -246,9 +250,17 @@ function renderGanttPanel(date) {
           <div class="gantt-stat-value" id="ghd-spch" style="color:${spchCol};">${spch ? '$'+spch : '—'}</div>
           ${displaySales ? `<div style="font-size:10px;color:var(--text3);text-align:center;" id="ghd-sales">of $${(displaySales/1000).toFixed(1)}k</div>` : ''}
         </div>
-        <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openAddShift('','${date}')">+ Add Shift</button>
+        <div class="add-shift-wrap" title="${noProj?'Tip: add a sales projection first for SPCH tracking':''}">
+          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openAddShift('','${date}')">+ Add Shift</button>
+        </div>
       </div>
     </div>
+    ${noProj ? `
+      <div class="no-proj-banner">
+        <span>⚠ No sales projection for this day — SPCH tracking won't work until you add one.</span>
+        <button class="btn btn-ghost btn-sm no-proj-banner-btn" onclick="goToSalesProjection('${date}')">Add projection →</button>
+      </div>
+    ` : ''}
     <div class="gantt-wrap" id="gantt-wrap-${date}">
       ${buildGanttDay(date, dayShifts, activeEmps)}
     </div>
@@ -860,6 +872,19 @@ function refreshDayHeading(date) {
   const hEl = document.getElementById('ghd-hours'); if (hEl) hEl.textContent = `${dayHours.toFixed(1)}h`;
   const cEl = document.getElementById('ghd-cost');  if (cEl) cEl.textContent = fmt(dayCost);
   const sEl = document.getElementById('ghd-spch');  if (sEl) { sEl.textContent = spch ? `$${spch}` : '—'; sEl.style.color = spchCol; }
+
+  // Toggle no-projection banner
+  const panel    = document.getElementById('roster-gantt-panel');
+  const existing = panel?.querySelector('.no-proj-banner');
+  if (!proj && !existing && panel) {
+    const banner = document.createElement('div');
+    banner.className = 'no-proj-banner';
+    banner.innerHTML = `<span>⚠ No sales projection for this day — SPCH tracking won't work until you add one.</span><button class="btn btn-ghost btn-sm no-proj-banner-btn" onclick="goToSalesProjection('${date}')">Add projection →</button>`;
+    const ganttWrap = panel.querySelector('.gantt-wrap');
+    if (ganttWrap) panel.insertBefore(banner, ganttWrap);
+  } else if (proj && existing) {
+    existing.remove();
+  }
 }
 
 function refreshRosterDaySpch(date) {
