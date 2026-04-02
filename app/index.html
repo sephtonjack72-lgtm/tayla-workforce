@@ -178,7 +178,7 @@
   <div id="sales" class="page">
     <div class="kpi-grid" id="sales-kpis"></div>
 
-    <div class="card" style="margin-bottom:16px;">
+    <div class="card" style="margin-bottom:0;border-radius:12px 12px 0 0;border-bottom:none;">
       <div class="card-header flex-between">
         <span class="card-title">Sales Projections</span>
         <div class="week-nav">
@@ -188,18 +188,10 @@
           <button class="btn btn-ghost btn-sm" onclick="goToCurrentSalesWeek()">This Week</button>
         </div>
       </div>
+      <div class="roster-day-tabs" id="sales-day-tabs"></div>
     </div>
 
-    <div class="sales-grid" id="sales-grid"></div>
-
-    <div class="sales-history-bar">
-      <div style="font-size:12px;color:var(--text3);">
-        Trend = weighted avg of same weekday · Manual projection shown alongside · SPCH = Sales ÷ Crew Hours
-      </div>
-      <button id="history-toggle-btn" class="btn btn-ghost btn-sm" onclick="toggleHistory()">▾ Show 52-Week History</button>
-    </div>
-
-    <div id="sales-history" class="card" style="padding:0;margin-bottom:20px;"></div>
+    <div class="roster-gantt-panel" id="sales-day-panel" style="overflow:visible;"></div>
   </div>
 
   <!-- ══════════════════ TIMESHEETS ══════════════════ -->
