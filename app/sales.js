@@ -255,10 +255,10 @@ function renderSalesDayPanel(date) {
         </div>
         <div style="font-size:12px;color:var(--text3);margin-top:2px;">${d.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
       </div>
-      <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
         <div class="gantt-stat">
           <div class="gantt-stat-label">Projection</div>
-          <div class="gantt-stat-value" id="spanel-proj">${proj ? fmt(proj) : '—'}</div>
+          <div class="gantt-stat-value" id="spanel-proj" style="color:var(--text);">${proj ? fmt(proj) : '—'}</div>
         </div>
         <div class="gantt-stat">
           <div class="gantt-stat-label">SPCH</div>
@@ -266,7 +266,7 @@ function renderSalesDayPanel(date) {
         </div>
         <div class="gantt-stat">
           <div class="gantt-stat-label">Labour %</div>
-          <div class="gantt-stat-value" id="spanel-labour" style="color:${labourPct?parseFloat(labourPct)<32?'var(--success)':'var(--warning)':'var(--text3)'};">${labourPct ? labourPct+'%' : '—'}</div>
+          <div class="gantt-stat-value" id="spanel-labour" style="color:${labourPct ? parseFloat(labourPct)<32?'var(--success)':'var(--warning)' : 'var(--text3)'};">${labourPct ? labourPct+'%' : '—'}</div>
         </div>
       </div>
     </div>
