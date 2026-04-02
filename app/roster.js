@@ -173,8 +173,8 @@ function renderDayTabs(weekDates) {
         const p = cachedShiftPay(s, emp); dayCost += p.totalPay; dayHours += p.workedHours;
       });
     });
-    const { proj, trend, target } = getSalesSummary(date);
-    const displaySales = proj || trend;
+    const { proj, target } = getSalesSummary(date);
+    const displaySales = proj;
     const spch    = displaySales && dayHours ? Math.round(displaySales / dayHours) : null;
     const spchCol = spch && target ? spchColour(spch, target) : 'var(--text3)';
 
@@ -221,8 +221,8 @@ function renderGanttPanel(date) {
   });
 
   const unassignedCount = dayShifts.filter(s => !s.employee_id).length;
-  const { proj, trend, target } = getSalesSummary(date);
-  const displaySales = proj || trend;
+  const { proj, target } = getSalesSummary(date);
+  const displaySales = proj;
   const spch    = displaySales && dayHours ? (displaySales / dayHours).toFixed(2) : null;
   const spchCol = spch && target ? spchColour(parseFloat(spch), target) : 'var(--text2)';
   const isPH    = isPublicHoliday(date);
@@ -244,7 +244,7 @@ function renderGanttPanel(date) {
         <div class="gantt-stat">
           <div class="gantt-stat-label">SPCH</div>
           <div class="gantt-stat-value" id="ghd-spch" style="color:${spchCol};">${spch ? '$'+spch : '—'}</div>
-          ${displaySales ? `<div style="font-size:10px;color:var(--text3);text-align:center;" id="ghd-sales">of $${(displaySales/1000).toFixed(1)}k${proj?'':' (trend)'}</div>` : ''}
+          ${displaySales ? `<div style="font-size:10px;color:var(--text3);text-align:center;" id="ghd-sales">of $${(displaySales/1000).toFixed(1)}k</div>` : ''}
         </div>
         <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openAddShift('','${date}')">+ Add Shift</button>
       </div>
@@ -853,8 +853,8 @@ function refreshDayHeading(date) {
       const p = calcShiftPay(s, emp); dayHours += p.workedHours; dayCost += p.totalPay;
     });
   });
-  const { proj, trend, target } = getSalesSummary(date);
-  const displaySales = proj || trend;
+  const { proj, target } = getSalesSummary(date);
+  const displaySales = proj;
   const spch    = displaySales && dayHours ? (displaySales / dayHours).toFixed(2) : null;
   const spchCol = spch && target ? spchColour(parseFloat(spch), target) : 'var(--text2)';
   const hEl = document.getElementById('ghd-hours'); if (hEl) hEl.textContent = `${dayHours.toFixed(1)}h`;
