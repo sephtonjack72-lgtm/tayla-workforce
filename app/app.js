@@ -112,14 +112,22 @@ function applyProfile(profile) {
   const userEl = document.getElementById('header-user');
   if (userEl) userEl.textContent = _currentUser?.email?.split('@')[0] || 'Account';
 
-  // Load all data — Promise.resolve handles cases where dbLoadEmployees
-  // returns undefined (no _businessId yet) so renders always fire
-  Promise.resolve(dbLoadEmployees()).then(() => {
+  // Load all data in parallel before rendering anything
+  const today     = new Date().toISOString().split('T')[0];
+  const weekStart = getWeekStart(today);
+  const weekDates = getWeekDates(weekStart);
+  const weekEnd   = weekDates[6];
+
+  Promise.all([
+    dbLoadEmployees(),
+    dbLoadShifts(weekStart, weekEnd),
+    dbLoadTimesheets(weekStart, weekEnd),
+  ]).then(() => {
+    renderDashboard();
     renderEmployees();
     renderRoster();
     renderSales();
     renderTimesheets();
-    renderDashboard();
   });
 }
 
@@ -173,6 +181,7 @@ function showPage(id) {
 // ══════════════════════════════════════════════════════
 
 function renderDashboard() {
+  if (typeof getWeekStart !== 'function') return; // helpers not loaded yet
   const today = new Date().toISOString().split('T')[0];
   const weekDates = getWeekDates(getWeekStart(today));
 
@@ -204,19 +213,21 @@ function renderDashboard() {
     } else {
       todayEl.innerHTML = todayShifts.map(s => {
         const emp = employees.find(e => e.id === s.employee_id);
-        if (!emp) return '';
-        const pay = calcShiftPay(s, emp);
-        const initials = ((emp.first_name?.[0] || '') + (emp.last_name?.[0] || '')).toUpperCase();
+        const initials = emp
+          ? ((emp.first_name?.[0] || '') + (emp.last_name?.[0] || '')).toUpperCase()
+          : '?';
+        const name = emp ? `${emp.first_name} ${emp.last_name}` : 'Unassigned';
+        const pay  = emp ? calcShiftPay(s, emp) : null;
         return `
           <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--border);">
             <div style="display:flex;align-items:center;gap:10px;">
-              <div class="avatar">${initials}</div>
+              <div class="avatar" style="${!emp?'background:var(--surface2);color:var(--text3);border:2px dashed var(--border);':''}">${initials}</div>
               <div>
-                <div style="font-weight:500;">${emp.first_name} ${emp.last_name}</div>
-                <div style="font-size:12px;color:var(--text3);">${fmtTime(s.start_time)} – ${fmtTime(s.end_time)} · ${pay.billableHours}h</div>
+                <div style="font-weight:500;${!emp?'color:var(--text3);':''}">${name}</div>
+                <div style="font-size:12px;color:var(--text3);">${fmtTime(s.start_time)} – ${fmtTime(s.end_time)}${pay ? ` · ${pay.billableHours}h` : ''}</div>
               </div>
             </div>
-            <div class="mono" style="font-weight:600;">${fmt(pay.totalPay)}</div>
+            <div class="mono" style="font-weight:600;">${pay ? fmt(pay.totalPay) : '—'}</div>
           </div>
         `;
       }).join('');
