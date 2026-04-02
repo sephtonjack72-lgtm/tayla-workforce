@@ -98,10 +98,9 @@ function salesWeekNav(dir) {
   d.setDate(d.getDate() + dir * 7);
   _salesWeekStart = d.toISOString().split('T')[0];
   const weekDates = getWeekDates(_salesWeekStart);
-  if (!weekDates.includes(_activeSalesDay)) _activeSalesDay = weekDates[0];
+  _activeSalesDay = weekDates[0];
   renderSales();
 }
-
 function goToCurrentSalesWeek() {
   _salesWeekStart = getWeekStart(new Date().toISOString().split('T')[0]);
   _activeSalesDay = new Date().toISOString().split('T')[0];
