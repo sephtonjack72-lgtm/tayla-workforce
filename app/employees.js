@@ -147,6 +147,8 @@ function openEditEmployee(id) {
   document.getElementById('emp-start-date').value   = e.start_date || '';
   document.getElementById('emp-laundry').checked    = e.laundry_allowance || false;
   document.getElementById('emp-active').value       = String(e.active !== false);
+document.getElementById('emp-tax-free').value = String(e.tax_free_threshold !== false);
+document.getElementById('emp-residency').value = e.residency_status || 'australian';
   document.getElementById('emp-modal').classList.add('show');
 }
 
@@ -174,6 +176,8 @@ async function saveEmployee() {
     start_date:           document.getElementById('emp-start-date').value,
     laundry_allowance:    document.getElementById('emp-laundry').checked,
     active:               document.getElementById('emp-active').value === 'true',
+tax_free_threshold: document.getElementById('emp-tax-free').value === 'true',
+residency_status:   document.getElementById('emp-residency').value,
     created_at:           editId ? undefined : new Date().toISOString(),
   };
   if (!editId) delete emp.created_at;
