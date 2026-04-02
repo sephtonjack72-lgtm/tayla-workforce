@@ -88,10 +88,12 @@ function getSalesSummary(date) {
 //  STATE
 // ══════════════════════════════════════════════════════
 
-let _salesWeekStart = getWeekStart(new Date().toISOString().split('T')[0]);
-let _activeSalesDay = new Date().toISOString().split('T')[0];
+// Initialised lazily on first renderSales call so getWeekStart is available
+let _salesWeekStart = null;
+let _activeSalesDay = null;
 
 function salesWeekNav(dir) {
+  if (!_salesWeekStart) { renderSales(); return; }
   const d = new Date(_salesWeekStart);
   d.setDate(d.getDate() + dir * 7);
   _salesWeekStart = d.toISOString().split('T')[0];
@@ -119,6 +121,12 @@ function switchSalesDay(date) {
 // ══════════════════════════════════════════════════════
 
 function renderSales() {
+  // Lazy init — getWeekStart lives in roster.js which loads after sales.js
+  if (!_salesWeekStart) {
+    _salesWeekStart = getWeekStart(new Date().toISOString().split('T')[0]);
+    _activeSalesDay = new Date().toISOString().split('T')[0];
+  }
+
   const weekDates = getWeekDates(_salesWeekStart);
   const weekEnd   = weekDates[6];
 
