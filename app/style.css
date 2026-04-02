@@ -1157,10 +1157,16 @@ tr:hover td { background: var(--surface2); }
 }
 
 /* ══════════════════════════════════════════════════════
-   Roster — No projection warning
+   Sales Projections — Day tab + Panel
 ══════════════════════════════════════════════════════ */
 
-/* Amber dot on day tab */
+/* Projection entered dot */
+.proj-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--success); flex-shrink: 0;
+}
+
+/* No-projection dot (pulsing amber) */
 .no-proj-dot {
   width: 6px; height: 6px; border-radius: 50%;
   background: var(--warning); flex-shrink: 0;
@@ -1169,63 +1175,146 @@ tr:hover td { background: var(--surface2); }
 @keyframes pulse-warning {
   0%,100% { opacity:1; } 50% { opacity:.4; }
 }
-
-/* "No projection" text on day tab */
 .day-tab-no-proj {
-  font-size: 9px;
-  font-weight: 700;
-  color: var(--warning);
-  text-transform: uppercase;
-  letter-spacing: .4px;
-  margin-top: 1px;
+  font-size: 9px; font-weight: 700;
+  color: var(--warning); text-transform: uppercase; letter-spacing: .4px; margin-top: 1px;
 }
+.day-tab.no-proj:not(.active) { border-top: 2px solid rgba(214,158,46,.35); }
 
-/* Subtle amber tint on unprojected tabs */
-.day-tab.no-proj:not(.active) {
-  border-top: 2px solid rgba(214,158,46,.35);
-}
-
-/* No-projection banner in Gantt panel */
+/* No-projection banner */
 .no-proj-banner {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 10px 18px;
+  background: #fffbeb; border-bottom: 1px solid #f6e05e;
+  font-size: 12px; color: #92400e; flex-wrap: wrap;
+}
+.no-proj-banner-btn {
+  background: #fef3c7 !important; border-color: #f6e05e !important;
+  color: #92400e !important; white-space: nowrap; font-weight: 700 !important;
+}
+.no-proj-banner-btn:hover { background: #fde68a !important; }
+
+/* Add shift tooltip wrapper */
+.add-shift-wrap { position: relative; }
+.add-shift-wrap[title]:hover::after {
+  content: attr(title);
+  position: absolute; bottom: calc(100% + 6px); right: 0;
+  background: #92400e; color: #fff; font-size: 11px; font-weight: 500;
+  padding: 5px 10px; border-radius: 6px; white-space: nowrap;
+  pointer-events: none; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,.15);
+}
+
+/* ── Sales panel heading ── */
+.sales-panel-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 18px;
-  background: #fffbeb;
-  border-bottom: 1px solid #f6e05e;
-  font-size: 12px;
-  color: #92400e;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
   flex-wrap: wrap;
-}
-.no-proj-banner-btn {
-  background: #fef3c7 !important;
-  border-color: #f6e05e !important;
-  color: #92400e !important;
-  white-space: nowrap;
-  font-weight: 700 !important;
-}
-.no-proj-banner-btn:hover {
-  background: #fde68a !important;
+  gap: 16px;
 }
 
-/* Add shift button tooltip wrapper */
-.add-shift-wrap {
-  position: relative;
+/* ── Two-column panel body ── */
+.sales-panel-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 380px;
 }
-.add-shift-wrap[title]:hover::after {
-  content: attr(title);
-  position: absolute;
-  bottom: calc(100% + 6px);
-  right: 0;
-  background: #92400e;
-  color: #fff;
+@media (max-width: 900px) {
+  .sales-panel-body { grid-template-columns: 1fr; }
+}
+
+/* ── Entry cards ── */
+.sales-entry-card {
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+}
+.sales-entry-card:last-child { border-right: none; }
+
+.sales-entry-card-placeholder {
+  background: var(--surface2);
+}
+
+.sales-entry-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px 20px 14px;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+
+/* ── Fields inside manual card ── */
+.sales-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.sales-field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.sales-field-row label {
   font-size: 11px;
-  font-weight: 500;
-  padding: 5px 10px;
-  border-radius: 6px;
-  white-space: nowrap;
-  pointer-events: none;
-  z-index: 100;
-  box-shadow: 0 4px 12px rgba(0,0,0,.15);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--text2);
+}
+.sales-input {
+  width: 100%;
+  padding: 10px 12px 10px 28px;
+  font-size: 14px;
+  font-family: 'DM Mono', monospace;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  transition: border-color .15s, background .15s;
+}
+.sales-input:focus { outline: none; border-color: var(--accent); background: #fff; }
+.sales-input.has-override { border-color: var(--success); background: rgba(56,161,105,.04); }
+.sales-input.actual-highlight { border-color: var(--accent3); }
+.spch-target-input:focus { border-color: var(--accent2); }
+.field-prefix {
+  position: absolute; left: 10px; top: 50%;
+  transform: translateY(-50%);
+  font-size: 13px; color: var(--text3);
+  font-family: 'DM Mono', monospace; pointer-events: none;
+}
+
+/* ── Live stats grid ── */
+.sales-live-stats { margin-top: 4px; }
+
+.sales-stat-chip {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+.sales-stat-label {
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .5px;
+  color: var(--text3); margin-bottom: 3px;
+}
+.sales-stat-value {
+  font-weight: 700; font-size: 18px;
+  font-family: 'DM Mono', monospace;
+  color: var(--text);
+}
+
+/* ── Sales panel — proj/spch/labour stat chips in heading ── */
+.sales-panel-heading .gantt-stat { text-align: center; min-width: 70px; }
+.sales-panel-heading .gantt-stat-label {
+  font-size: 10px; text-transform: uppercase;
+  letter-spacing: .6px; color: var(--text3);
+}
+.sales-panel-heading .gantt-stat-value {
+  font-weight: 700; font-size: 22px; line-height: 1.2;
+  font-family: 'DM Serif Display', serif;
 }
