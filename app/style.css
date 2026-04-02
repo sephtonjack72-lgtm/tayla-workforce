@@ -1157,74 +1157,75 @@ tr:hover td { background: var(--surface2); }
 }
 
 /* ══════════════════════════════════════════════════════
-   Sales Projections — Day panel layout
+   Roster — No projection warning
 ══════════════════════════════════════════════════════ */
 
-.proj-dot {
+/* Amber dot on day tab */
+.no-proj-dot {
   width: 6px; height: 6px; border-radius: 50%;
-  background: var(--success); flex-shrink: 0;
+  background: var(--warning); flex-shrink: 0;
+  animation: pulse-warning 2s ease-in-out infinite;
+}
+@keyframes pulse-warning {
+  0%,100% { opacity:1; } 50% { opacity:.4; }
 }
 
-.sales-panel-heading {
+/* "No projection" text on day tab */
+.day-tab-no-proj {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--warning);
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  margin-top: 1px;
+}
+
+/* Subtle amber tint on unprojected tabs */
+.day-tab.no-proj:not(.active) {
+  border-top: 2px solid rgba(214,158,46,.35);
+}
+
+/* No-projection banner in Gantt panel */
+.no-proj-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px 22px;
-  border-bottom: 1px solid var(--border);
-  flex-wrap: wrap;
   gap: 12px;
-  background: var(--surface);
+  padding: 10px 18px;
+  background: #fffbeb;
+  border-bottom: 1px solid #f6e05e;
+  font-size: 12px;
+  color: #92400e;
+  flex-wrap: wrap;
+}
+.no-proj-banner-btn {
+  background: #fef3c7 !important;
+  border-color: #f6e05e !important;
+  color: #92400e !important;
+  white-space: nowrap;
+  font-weight: 700 !important;
+}
+.no-proj-banner-btn:hover {
+  background: #fde68a !important;
 }
 
-.sales-panel-body {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0;
-  min-height: 300px;
+/* Add shift button tooltip wrapper */
+.add-shift-wrap {
+  position: relative;
 }
-@media (max-width: 768px) {
-  .sales-panel-body { grid-template-columns: 1fr; }
-}
-
-.sales-entry-card {
-  border-right: 1px solid var(--border);
-  background: var(--surface);
-}
-.sales-entry-card:last-child { border-right: none; }
-
-.sales-entry-card-placeholder {
-  background: var(--surface2);
-  opacity: .85;
-}
-
-.sales-entry-card-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 16px 20px 12px;
-  border-bottom: 1px solid var(--border);
-}
-
-.sales-live-stats {
-  margin-top: 8px;
-}
-
-.sales-stat-chip {
-  background: var(--bg);
-  border-radius: 8px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-}
-.sales-stat-label {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .5px;
-  color: var(--text3);
-  margin-bottom: 2px;
-}
-.sales-stat-value {
-  font-weight: 700;
-  font-size: 16px;
-  font-family: 'DM Mono', monospace;
+.add-shift-wrap[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  background: #92400e;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,.15);
 }
