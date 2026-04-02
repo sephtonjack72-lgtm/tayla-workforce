@@ -254,8 +254,7 @@ async function sendTaylaInvite() {
   btn.disabled    = true;
 
   try {
-    const { data: { session } } = await _supabase.auth.getSession();
-    const token = session?.access_token;
+    const token = _supabase.changedAccessToken;
 
     const res  = await fetch(
       'https://whedwekxzjfqwjuoarid.supabase.co/functions/v1/send-invite',
