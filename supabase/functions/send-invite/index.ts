@@ -27,13 +27,12 @@ serve(async (req) => {
     )
 
     // Verify JWT and get user
-    const sbAuth = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } }
-    )
-    const { data: { user }, error: authErr } = await sbAuth.auth.getUser()
-    if (authErr || !user) return json({ error: 'Unauthorised' }, 401)
+const sbAnon = createClient(
+  Deno.env.get('SUPABASE_URL')!,
+  Deno.env.get('SUPABASE_ANON_KEY')!,
+)
+const { data: { user }, error: authErr } = await sbAnon.auth.getUser(authHeader.replace('Bearer ', ''))
+if (authErr || !user) return json({ error: 'Unauthorised' }, 401)
 
     const { employee_id, business_id } = await req.json()
     if (!employee_id || !business_id) return json({ error: 'Missing employee_id or business_id' }, 400)
