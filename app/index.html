@@ -154,11 +154,16 @@
     <div class="card" style="margin-bottom:0;border-radius:12px 12px 0 0;border-bottom:none;">
       <div class="card-header flex-between">
         <span class="card-title">Weekly Roster</span>
-        <div class="week-nav">
-          <button onclick="weekNav(-1)">‹</button>
-          <span id="roster-week-label">—</span>
-          <button onclick="weekNav(1)">›</button>
-          <button class="btn btn-ghost btn-sm" onclick="goToCurrentWeek()">Today</button>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div class="week-nav">
+            <button onclick="weekNav(-1)">‹</button>
+            <span id="roster-week-label">—</span>
+            <button onclick="weekNav(1)">›</button>
+            <button class="btn btn-ghost btn-sm" onclick="goToCurrentWeek()">Today</button>
+          </div>
+          <button class="btn btn-accent" id="publish-week-btn" onclick="publishWeek()" style="white-space:nowrap;">
+            📢 Publish Week
+          </button>
         </div>
       </div>
       <div class="roster-day-tabs" id="roster-day-tabs"></div>
@@ -437,6 +442,7 @@
 <script src="roster.js"></script>
 <script src="timesheets.js"></script>
 <script src="payg.js"></script>
+<script src="payslip.js"></script>
 <script src="app.js"></script>
 <script>
   // Populate shift employee select when modal opens

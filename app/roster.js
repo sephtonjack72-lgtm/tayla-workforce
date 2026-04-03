@@ -4,8 +4,8 @@
 ══════════════════════════════════════════════════════ */
 
 let shifts = JSON.parse(localStorage.getItem('wf_shifts') || '[]');
-let _currentWeekStart = getWeekStart(new Date().toISOString().split('T')[0]);
-let _activeDay        = new Date().toISOString().split('T')[0];
+let _currentWeekStart = getWeekStart(localDateStr(new Date()));
+let _activeDay        = localDateStr(new Date());
 let _assignPopover    = null; // { shiftId, el }
 
 // ── Pay cache — cleared on each render, avoids recalculating per shift repeatedly
@@ -62,24 +62,24 @@ async function dbDeleteShift(id) {
 // ══════════════════════════════════════════════════════
 
 function getWeekStart(dateStr) {
-  const d = new Date(dateStr);
+  const d = parseLocalDate(dateStr);
   const day = d.getDay();
   d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
-  return d.toISOString().split('T')[0];
+  return localDateStr(d);
 }
 
 function weekNav(dir) {
   const d = new Date(_currentWeekStart);
   d.setDate(d.getDate() + dir * 7);
-  _currentWeekStart = d.toISOString().split('T')[0];
+  _currentWeekStart = localDateStr(d);
   _activeDay = _currentWeekStart;
   closeAssignPopover();
   renderRoster();
 }
 
 function goToCurrentWeek() {
-  _currentWeekStart = getWeekStart(new Date().toISOString().split('T')[0]);
-  _activeDay = new Date().toISOString().split('T')[0];
+  _currentWeekStart = getWeekStart(localDateStr(new Date()));
+  _activeDay = localDateStr(new Date());
   closeAssignPopover();
   renderRoster();
 }
@@ -157,7 +157,7 @@ function renderRosterKPIs(weekDates) {
 function renderDayTabs(weekDates) {
   const container = document.getElementById('roster-day-tabs');
   if (!container) return;
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDateStr(new Date());
 
   container.innerHTML = weekDates.map((date, i) => {
     const isActive   = date === _activeDay;
@@ -297,7 +297,7 @@ function buildGanttDay(date, dayShifts, activeEmps) {
 
   const nowPct = (() => {
     const now = new Date();
-    if (date !== now.toISOString().split('T')[0]) return null;
+    if (date !== localDateStr(now)) return null;
     const h = now.getHours() + now.getMinutes() / 60;
     if (h < TIMELINE_START || h > TIMELINE_END) return null;
     return ((h - TIMELINE_START) / TIMELINE_HOURS) * 100;
@@ -1068,4 +1068,79 @@ function populateShiftEmployeeSelect() {
     employees.filter(e => e.active !== false).map(e =>
       `<option value="${e.id}" ${e.id===cur?'selected':''}>${e.first_name} ${e.last_name} (${e.employment_type||'casual'})</option>`
     ).join('');
+}
+
+// ══════════════════════════════════════════════════════
+//  PUBLISH WEEK
+// ══════════════════════════════════════════════════════
+
+async function publishWeek() {
+  const weekDates  = getWeekDates(_currentWeekStart);
+  const weekEnd    = weekDates[6];
+  const btn        = document.getElementById('publish-week-btn');
+
+  // Get all non-cancelled shifts this week
+  const weekShifts = shifts.filter(s =>
+    weekDates.includes(s.date) && s.status !== 'cancelled'
+  );
+
+  if (!weekShifts.length) {
+    toast('No shifts to publish this week');
+    return;
+  }
+
+  if (!confirm(`Publish ${weekShifts.length} shift${weekShifts.length !== 1 ? 's' : ''} for this week? Employees with Tayla accounts will be notified.`)) return;
+
+  btn.textContent = 'Publishing…';
+  btn.disabled    = true;
+
+  try {
+    // 1. Mark all draft shifts as published in DB
+    const draftShifts = weekShifts.filter(s => s.status === 'draft');
+    for (const shift of draftShifts) {
+      shift.status = 'published';
+      await dbSaveShift(shift);
+    }
+
+    // 2. Push to Tayla via Edge Function
+    const { data: { session } } = await _supabase.auth.getSession();
+    const token = session?.access_token;
+
+    const res = await fetch(
+      'https://whedwekxzjfqwjuoarid.supabase.co/functions/v1/push-shifts',
+      {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          business_id: _businessId,
+          week_start:  _currentWeekStart,
+          week_end:    weekEnd,
+        }),
+      }
+    );
+
+    const data = await res.json();
+
+    if (!res.ok || data.error) throw new Error(data.error || 'Push failed');
+
+    // 3. Refresh roster to show published status
+    renderRoster();
+
+    const notified = data.employees_notified || 0;
+    const msg = notified > 0
+      ? `Week published ✓ · ${notified} employee${notified !== 1 ? 's' : ''} notified on Tayla`
+      : `Week published ✓ · No employees connected to Tayla yet`;
+
+    toast(msg, 5000);
+
+  } catch (err) {
+    console.error('Publish week failed:', err);
+    toast('⚠ ' + err.message);
+  } finally {
+    btn.textContent = '📢 Publish Week';
+    btn.disabled    = false;
+  }
 }

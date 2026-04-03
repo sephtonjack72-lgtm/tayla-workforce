@@ -307,6 +307,8 @@ async function savePayslipRecord() {
 }
 
 // ══════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════
 //  DOWNLOAD PDF
 // ══════════════════════════════════════════════════════
 
@@ -316,12 +318,87 @@ async function downloadPayslipPDF() {
   if (!content) return;
 
   const opt = {
-    margin:     [10, 10, 10, 10],
-    filename:   `payslip-${_payslipEmployee.last_name}-${_payslipData.weekEnd}.pdf`,
-    image:      { type: 'jpeg', quality: 0.98 },
+    margin:      [10, 10, 10, 10],
+    filename:    `payslip-${_payslipEmployee.last_name}-${_payslipData.weekEnd}.pdf`,
+    image:       { type: 'jpeg', quality: 0.98 },
     html2canvas: { scale: 2 },
-    jsPDF:      { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
   };
 
   html2pdf().set(opt).from(content).save();
-  toast('Pay
+  toast('Payslip downloaded ✓');
+}
+
+// ══════════════════════════════════════════════════════
+//  PUSH TO TAYLA
+// ══════════════════════════════════════════════════════
+
+async function pushPayslipToTayla() {
+  if (!_payslipData || !_businessId) return;
+
+  const btn    = document.getElementById('payslip-push-btn');
+  const status = document.getElementById('payslip-push-status');
+  if (btn) { btn.textContent = 'Sending…'; btn.disabled = true; }
+  if (status) status.innerHTML = '';
+
+  try {
+    // 1. Save/update the record in Workforce first
+    await savePayslipRecord();
+
+    // 2. Get the saved payslip ID
+    const { emp, weekStart } = _payslipData;
+    const { data: saved } = await _supabase
+      .from('payslips')
+      .select('id, employee_id')
+      .eq('business_id', _businessId)
+      .eq('employee_id', emp.id)
+      .eq('week_start', weekStart)
+      .maybeSingle();
+
+    if (!saved) throw new Error('Could not find saved payslip record');
+
+    // Check if employee is connected to Tayla
+    if (!emp.tayla_user_id) {
+      if (status) status.innerHTML = `
+        <div style="padding:10px 14px;background:#fff3cd;border-radius:8px;font-size:12px;color:#856404;">
+          ⚠ ${emp.first_name} hasn't connected their Tayla account yet.
+          <br>Go to Employees → click 📲 Invite to send them a link.
+        </div>`;
+      if (btn) { btn.textContent = '📲 Send to Tayla'; btn.disabled = false; }
+      return;
+    }
+
+    // 3. Call Edge Function to push to Tayla
+    const { data: { session } } = await _supabase.auth.getSession();
+    const token = session?.access_token;
+
+    const res = await fetch(
+      'https://whedwekxzjfqwjuoarid.supabase.co/functions/v1/push-payslip',
+      {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ payslip_id: saved.id }),
+      }
+    );
+
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || 'Push failed');
+
+    if (status) status.innerHTML = `
+      <div style="padding:10px 14px;background:rgba(56,161,105,.08);border-radius:8px;font-size:12px;color:var(--success);border:1px solid rgba(56,161,105,.2);">
+        ✓ Payslip sent to ${emp.first_name}'s Tayla account
+      </div>`;
+    if (btn) { btn.textContent = '✓ Sent'; btn.disabled = true; }
+    toast(`Payslip sent to ${emp.first_name} ✓`);
+
+  } catch (err) {
+    if (status) status.innerHTML = `
+      <div style="padding:10px 14px;background:#fde2e2;border-radius:8px;font-size:12px;color:var(--danger);">
+        ⚠ ${err.message}
+      </div>`;
+    if (btn) { btn.textContent = '📲 Send to Tayla'; btn.disabled = false; }
+  }
+}
