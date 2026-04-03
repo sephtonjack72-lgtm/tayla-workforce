@@ -69,7 +69,7 @@ function getWeekStart(dateStr) {
 }
 
 function weekNav(dir) {
-  const d = new Date(_currentWeekStart);
+  const d = parseLocalDate(_currentWeekStart);
   d.setDate(d.getDate() + dir * 7);
   _currentWeekStart = localDateStr(d);
   _activeDay = _currentWeekStart;
@@ -105,7 +105,7 @@ function renderRoster() {
 
   const label = document.getElementById('roster-week-label');
   if (label) {
-    const s = new Date(_currentWeekStart), e = new Date(weekEnd);
+    const s = parseLocalDate(_currentWeekStart), e = parseLocalDate(weekEnd);
     label.textContent = `${s.toLocaleDateString('en-AU',{day:'numeric',month:'short'})} — ${e.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}`;
   }
 
@@ -165,7 +165,7 @@ function renderDayTabs(weekDates) {
     const isPH       = isPublicHoliday(date);
     const dayShifts  = shifts.filter(s => s.date === date && s.status !== 'cancelled');
     const unassigned = dayShifts.filter(s => !s.employee_id).length;
-    const d = new Date(date);
+    const d = parseLocalDate(date);
 
     let dayCost = 0, dayHours = 0;
     employees.filter(e => e.active !== false).forEach(emp => {
@@ -229,7 +229,7 @@ function renderGanttPanel(date) {
   const spch    = displaySales && dayHours ? (displaySales / dayHours).toFixed(2) : null;
   const spchCol = spch && target ? spchColour(parseFloat(spch), target) : 'var(--text2)';
   const isPH    = isPublicHoliday(date);
-  const d       = new Date(date);
+  const d       = parseLocalDate(date);
   const noProj  = !proj;
 
   panel.innerHTML = `

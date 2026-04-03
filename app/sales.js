@@ -94,7 +94,7 @@ let _activeSalesDay = null;
 
 function salesWeekNav(dir) {
   if (!_salesWeekStart) { renderSales(); return; }
-  const d = new Date(_salesWeekStart);
+  const d = parseLocalDate(_salesWeekStart);
   d.setDate(d.getDate() + dir * 7);
   _salesWeekStart = d.toISOString().split('T')[0];
   const weekDates = getWeekDates(_salesWeekStart);
@@ -135,7 +135,7 @@ function renderSales() {
   // Update week label
   const label = document.getElementById('sales-week-label');
   if (label) {
-    const s = new Date(_salesWeekStart), e = new Date(weekEnd);
+    const s = parseLocalDate(_salesWeekStart), e = parseLocalDate(weekEnd);
     label.textContent = `${s.toLocaleDateString('en-AU',{day:'numeric',month:'short'})} — ${e.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}`;
   }
 
@@ -193,7 +193,7 @@ function renderSalesDayTabs(weekDates) {
     const isToday  = date === today;
     const isPH     = isPublicHoliday(date);
     const sd       = salesData[date] || {};
-    const d        = new Date(date);
+    const d        = parseLocalDate(date);
     const hasProj  = sd.projected != null;
     const crewHours = getDayCrewHours(date);
     const spch = calcSpch(sd.projected, crewHours);
@@ -230,7 +230,7 @@ function renderSalesDayPanel(date) {
   const sd         = salesData[date] || {};
   const weekDates  = getWeekDates(_salesWeekStart);
   const dayIdx     = weekDates.indexOf(date);
-  const d          = new Date(date);
+  const d          = parseLocalDate(date);
   const today      = new Date().toISOString().split('T')[0];
   const isPast     = date < today;
   const isToday    = date === today;
