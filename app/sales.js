@@ -96,14 +96,14 @@ function salesWeekNav(dir) {
   if (!_salesWeekStart) { renderSales(); return; }
   const d = parseLocalDate(_salesWeekStart);
   d.setDate(d.getDate() + dir * 7);
-  _salesWeekStart = d.toISOString().split('T')[0];
+  _salesWeekStart = localDateStr(d);
   const weekDates = getWeekDates(_salesWeekStart);
   _activeSalesDay = weekDates[0];
   renderSales();
 }
 function goToCurrentSalesWeek() {
-  _salesWeekStart = getWeekStart(new Date().toISOString().split('T')[0]);
-  _activeSalesDay = new Date().toISOString().split('T')[0];
+  _salesWeekStart = getWeekStart(localDateStr(new Date()));
+  _activeSalesDay = localDateStr(new Date());
   renderSales();
 }
 
@@ -122,8 +122,8 @@ function switchSalesDay(date) {
 function renderSales() {
   // Lazy init — getWeekStart lives in roster.js which loads after sales.js
   if (!_salesWeekStart) {
-    _salesWeekStart = getWeekStart(new Date().toISOString().split('T')[0]);
-    _activeSalesDay = new Date().toISOString().split('T')[0];
+    _salesWeekStart = getWeekStart(localDateStr(new Date()));
+    _activeSalesDay = localDateStr(new Date());
   }
 
   const weekDates = getWeekDates(_salesWeekStart);
@@ -186,7 +186,7 @@ const SALES_DAY_SHORT = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 function renderSalesDayTabs(weekDates) {
   const container = document.getElementById('sales-day-tabs');
   if (!container) return;
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDateStr(new Date());
 
   container.innerHTML = weekDates.map((date, i) => {
     const isActive = date === _activeSalesDay;
@@ -231,7 +231,7 @@ function renderSalesDayPanel(date) {
   const weekDates  = getWeekDates(_salesWeekStart);
   const dayIdx     = weekDates.indexOf(date);
   const d          = parseLocalDate(date);
-  const today      = new Date().toISOString().split('T')[0];
+  const today      = localDateStr(new Date());
   const isPast     = date < today;
   const isToday    = date === today;
   const isPH       = isPublicHoliday(date);
