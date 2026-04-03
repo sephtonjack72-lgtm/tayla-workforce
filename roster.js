@@ -4,8 +4,8 @@
 ══════════════════════════════════════════════════════ */
 
 let shifts = JSON.parse(localStorage.getItem('wf_shifts') || '[]');
-let _currentWeekStart = getWeekStart(new Date().toISOString().split('T')[0]);
-let _activeDay        = new Date().toISOString().split('T')[0];
+let _currentWeekStart = getWeekStart(localDateStr(new Date()));
+let _activeDay        = localDateStr(new Date());
 let _assignPopover    = null; // { shiftId, el }
 
 // ── Pay cache — cleared on each render, avoids recalculating per shift repeatedly
@@ -65,21 +65,21 @@ function getWeekStart(dateStr) {
   const d = new Date(dateStr);
   const day = d.getDay();
   d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
-  return d.toISOString().split('T')[0];
+  return localDateStr(d);
 }
 
 function weekNav(dir) {
   const d = new Date(_currentWeekStart);
   d.setDate(d.getDate() + dir * 7);
-  _currentWeekStart = d.toISOString().split('T')[0];
+  _currentWeekStart = localDateStr(d);
   _activeDay = _currentWeekStart;
   closeAssignPopover();
   renderRoster();
 }
 
 function goToCurrentWeek() {
-  _currentWeekStart = getWeekStart(new Date().toISOString().split('T')[0]);
-  _activeDay = new Date().toISOString().split('T')[0];
+  _currentWeekStart = getWeekStart(localDateStr(new Date()));
+  _activeDay = localDateStr(new Date());
   closeAssignPopover();
   renderRoster();
 }
@@ -157,7 +157,7 @@ function renderRosterKPIs(weekDates) {
 function renderDayTabs(weekDates) {
   const container = document.getElementById('roster-day-tabs');
   if (!container) return;
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDateStr(new Date());
 
   container.innerHTML = weekDates.map((date, i) => {
     const isActive   = date === _activeDay;
@@ -297,7 +297,7 @@ function buildGanttDay(date, dayShifts, activeEmps) {
 
   const nowPct = (() => {
     const now = new Date();
-    if (date !== now.toISOString().split('T')[0]) return null;
+    if (date !== localDateStr(now)) return null;
     const h = now.getHours() + now.getMinutes() / 60;
     if (h < TIMELINE_START || h > TIMELINE_END) return null;
     return ((h - TIMELINE_START) / TIMELINE_HOURS) * 100;
