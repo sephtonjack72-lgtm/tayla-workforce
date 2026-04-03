@@ -8,7 +8,6 @@
 <title>Tayla Workforce</title>
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body>
 
@@ -155,11 +154,16 @@
     <div class="card" style="margin-bottom:0;border-radius:12px 12px 0 0;border-bottom:none;">
       <div class="card-header flex-between">
         <span class="card-title">Weekly Roster</span>
-        <div class="week-nav">
-          <button onclick="weekNav(-1)">‹</button>
-          <span id="roster-week-label">—</span>
-          <button onclick="weekNav(1)">›</button>
-          <button class="btn btn-ghost btn-sm" onclick="goToCurrentWeek()">Today</button>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div class="week-nav">
+            <button onclick="weekNav(-1)">‹</button>
+            <span id="roster-week-label">—</span>
+            <button onclick="weekNav(1)">›</button>
+            <button class="btn btn-ghost btn-sm" onclick="goToCurrentWeek()">Today</button>
+          </div>
+          <button class="btn btn-accent" id="publish-week-btn" onclick="publishWeek()" style="white-space:nowrap;">
+            📢 Publish Week
+          </button>
         </div>
       </div>
       <div class="roster-day-tabs" id="roster-day-tabs"></div>
@@ -429,39 +433,6 @@
   </div>
 </div>
 
-<!-- Payslip Modal -->
-<div class="modal-overlay" id="payslip-modal">
-  <div class="modal" style="max-width:760px;width:95vw;max-height:92vh;display:flex;flex-direction:column;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-shrink:0;">
-      <h3 style="margin:0;">Payslip Preview</h3>
-      <button class="btn btn-ghost btn-sm" onclick="closeModal('payslip-modal')">✕ Close</button>
-    </div>
-
-    <!-- PAYG Override -->
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border-radius:8px;margin-bottom:14px;flex-shrink:0;flex-wrap:wrap;">
-      <label style="font-size:12px;font-weight:600;color:var(--text2);">PAYG Override ($):</label>
-      <input type="number" id="payg-override" step="1" min="0"
-        style="width:100px;padding:6px 10px;font-size:13px;font-family:'DM Mono',monospace;"
-        placeholder="Auto">
-      <button class="btn btn-ghost btn-sm" onclick="applyPaygOverride()">Apply</button>
-      <span style="font-size:11px;color:var(--text3);">Auto-calculated from ATO 2025-26 tax tables. Override if needed.</span>
-    </div>
-
-    <!-- Push status -->
-    <div id="payslip-push-status" style="margin-bottom:10px;flex-shrink:0;"></div>
-
-    <!-- Payslip preview (scrollable) -->
-    <div id="payslip-preview" style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:#fff;"></div>
-
-    <!-- Actions -->
-    <div class="flex-gap" style="justify-content:flex-end;margin-top:16px;flex-shrink:0;">
-      <button class="btn btn-ghost btn-sm" onclick="closeModal('payslip-modal')">Close</button>
-      <button class="btn btn-primary btn-sm" id="payslip-push-btn" onclick="pushPayslipToTayla()">📲 Send to Tayla</button>
-      <button class="btn btn-accent" onclick="downloadPayslipPDF()">⬇ Download PDF</button>
-    </div>
-  </div>
-</div>
-
 <!-- Toast -->
 <div id="toast"></div>
 
@@ -471,7 +442,6 @@
 <script src="roster.js"></script>
 <script src="timesheets.js"></script>
 <script src="payg.js"></script>
-<script src="payslip.js"></script>
 <script src="app.js"></script>
 <script>
   // Populate shift employee select when modal opens
