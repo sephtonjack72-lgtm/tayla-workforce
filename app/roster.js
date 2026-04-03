@@ -1103,8 +1103,7 @@ async function publishWeek() {
     }
 
     // 2. Push to Tayla via Edge Function
-    const { data: { session } } = await _supabase.auth.getSession();
-    const token = session?.access_token;
+    const token = _supabase.changedAccessToken;
 
     const res = await fetch(
       'https://whedwekxzjfqwjuoarid.supabase.co/functions/v1/push-shifts',
