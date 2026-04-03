@@ -221,6 +221,12 @@ function fmtTime(timeStr) {
   return `${hour}:${String(m).padStart(2,'0')}${period}`;
 }
 
+// ── Parse a YYYY-MM-DD string as LOCAL date (not UTC)
+function parseLocalDate(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 // ── Local date string (avoids UTC timezone shift on toISOString)
 function localDateStr(d) {
   const y = d.getFullYear();
@@ -231,7 +237,7 @@ function localDateStr(d) {
 
 // ── Get week dates (Mon–Sun) for a given date
 function getWeekDates(dateStr) {
-  const d = new Date(dateStr);
+  const d   = parseLocalDate(dateStr);
   const day = d.getDay();
   const diff = day === 0 ? -6 : 1 - day; // Monday start
   const mon = new Date(d);

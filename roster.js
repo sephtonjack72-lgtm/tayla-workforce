@@ -62,7 +62,7 @@ async function dbDeleteShift(id) {
 // ══════════════════════════════════════════════════════
 
 function getWeekStart(dateStr) {
-  const d = new Date(dateStr);
+  const d = parseLocalDate(dateStr);
   const day = d.getDay();
   d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
   return localDateStr(d);
