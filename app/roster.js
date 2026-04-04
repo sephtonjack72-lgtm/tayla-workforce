@@ -7,6 +7,7 @@ let shifts = JSON.parse(localStorage.getItem('wf_shifts') || '[]');
 let _currentWeekStart = getWeekStart(localDateStr(new Date()));
 let _activeDay        = localDateStr(new Date());
 let _assignPopover    = null; // { shiftId, el }
+let _dragJustFinished = false; // suppress click after drag-create
 
 // ── Pay cache — cleared on each render, avoids recalculating per shift repeatedly
 const _payCache = {};
@@ -749,6 +750,8 @@ function onTrackMouseDown(e, empId, date) {
     let sM = sh*60+sm, eM = eh*60+em;
     if (eM <= sM) eM += 1440;
     if (eM - sM < 15) return;
+    _dragJustFinished = true;
+    setTimeout(() => { _dragJustFinished = false; }, 100);
     openAddShift(empId, date, newStart, newEnd);
   }
 
@@ -760,6 +763,7 @@ function onTrackMouseDown(e, empId, date) {
 // Plain click on empty track → open modal at that hour (employee rows only)
 function onTrackClick(e, empId, date) {
   if (e.target.closest('.shift-bar')) return;
+  if (_dragJustFinished) return; // suppress click fired after drag-create
   // Unassigned track: clicks are handled by bar popovers; empty clicks do nothing
   if (!empId) return;
   closeAssignPopover();
