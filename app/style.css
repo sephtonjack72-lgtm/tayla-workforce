@@ -1318,3 +1318,44 @@ tr:hover td { background: var(--surface2); }
   font-weight: 700; font-size: 22px; line-height: 1.2;
   font-family: 'DM Serif Display', serif;
 }
+
+/* ══════════════════════════════════════════════════════
+   Availability overlays on Gantt
+══════════════════════════════════════════════════════ */
+
+.gantt-avail-overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 0;
+  border-radius: 0;
+}
+
+/* Fully unavailable — full width red-tinted stripe */
+.gantt-avail-unavailable {
+  left: 0;
+  width: 100%;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(229,62,62,0.06),
+    rgba(229,62,62,0.06) 4px,
+    transparent 4px,
+    transparent 10px
+  );
+  border-top: 2px solid rgba(229,62,62,0.15);
+  border-bottom: 2px solid rgba(229,62,62,0.15);
+}
+
+/* Outside available hours — grey hatching */
+.gantt-avail-restricted {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(0,0,0,0.04),
+    rgba(0,0,0,0.04) 4px,
+    transparent 4px,
+    transparent 10px
+  );
+  border-top: 1px solid rgba(0,0,0,0.08);
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+}

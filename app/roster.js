@@ -28,6 +28,23 @@ const DAY_LONG  = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'
 //  SUPABASE
 // ══════════════════════════════════════════════════════
 
+// Availability keyed by employee_id → array of { day_of_week, available, start_time, end_time }
+let availabilityData = {};
+
+async function dbLoadAvailability() {
+  if (!_businessId) return;
+  const { data, error } = await _supabase
+    .from('employee_availability')
+    .select('*')
+    .eq('business_id', _businessId);
+  if (error) { console.error('Load availability failed:', error); return; }
+  availabilityData = {};
+  (data || []).forEach(row => {
+    if (!availabilityData[row.employee_id]) availabilityData[row.employee_id] = {};
+    availabilityData[row.employee_id][row.day_of_week] = row;
+  });
+}
+
 async function dbLoadShifts(weekStart, weekEnd) {
   if (!_businessId) return;
   const { data, error } = await _supabase
@@ -109,7 +126,10 @@ function renderRoster() {
     label.textContent = `${s.toLocaleDateString('en-AU',{day:'numeric',month:'short'})} — ${e.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}`;
   }
 
-  Promise.resolve(dbLoadShifts(_currentWeekStart, weekEnd)).then(() => {
+  Promise.all([
+    dbLoadShifts(_currentWeekStart, weekEnd),
+    dbLoadAvailability(),
+  ]).then(() => {
     renderRosterKPIs(weekDates);
     renderDayTabs(weekDates);
     renderGanttPanel(_activeDay);
@@ -399,6 +419,9 @@ function buildGanttRow(emp, date, empShifts) {
   let totalHours = 0, totalCost = 0;
   empShifts.forEach(s => { const p = cachedShiftPay(s,emp); totalHours += p.workedHours; totalCost += p.totalPay; });
 
+  // Build availability overlay for this employee on this day
+  const avOverlay = buildAvailabilityOverlay(emp.id, date);
+
   if (!empShifts.length) {
     // Employee with no shifts — show row so they can drag to create
     return `
@@ -412,7 +435,7 @@ function buildGanttRow(emp, date, empShifts) {
         </div>
         <div class="gantt-track" data-emp="${emp.id}" data-date="${date}"
           onmousedown="onTrackMouseDown(event,'${emp.id}','${date}')"
-          onclick="onTrackClick(event,'${emp.id}','${date}')"></div>
+          onclick="onTrackClick(event,'${emp.id}','${date}')">${avOverlay}</div>
       </div>`;
   }
 
@@ -434,10 +457,61 @@ function buildGanttRow(emp, date, empShifts) {
         <div class="gantt-track" data-emp="${emp.id}" data-date="${date}"
           onmousedown="onTrackMouseDown(event,'${emp.id}','${date}')"
           onclick="onTrackClick(event,'${emp.id}','${date}')">
+          ${isFirst ? avOverlay : ''}
           ${buildShiftBar(s, emp)}
         </div>
       </div>`;
   }).join('');
+}
+
+// ── Availability overlay — grey blocks for unavailable hours ─────────────────
+function buildAvailabilityOverlay(empId, date) {
+  const empAvail = availabilityData[empId];
+  if (!empAvail) return ''; // no availability data — show nothing
+
+  const d = parseLocalDate(date);
+  const dow = d.getDay(); // 0=Sun … 6=Sat
+  const avail = empAvail[dow];
+
+  // If fully unavailable for this day
+  if (avail && avail.available === false) {
+    return `<div class="gantt-avail-overlay gantt-avail-unavailable" title="${getEmpName(empId)} is unavailable this day"></div>`;
+  }
+
+  // If available with time restrictions
+  if (avail && avail.available === true && avail.start_time && avail.end_time) {
+    const GANTT_START = 6; // 6am
+    const GANTT_HOURS = 20; // 6am–2am (20hrs shown)
+    const avStart = timeToDecimal(avail.start_time);
+    const avEnd   = timeToDecimal(avail.end_time);
+
+    const leftPct  = Math.max(0, ((GANTT_START - GANTT_START) / GANTT_HOURS) * 100);
+    const beforeW  = Math.max(0, ((avStart - GANTT_START) / GANTT_HOURS) * 100);
+    const afterL   = Math.max(0, ((avEnd - GANTT_START) / GANTT_HOURS) * 100);
+    const afterW   = Math.max(0, (1 - afterL / 100) * 100);
+
+    let overlays = '';
+    if (beforeW > 0) {
+      overlays += `<div class="gantt-avail-overlay gantt-avail-restricted" style="left:0;width:${beforeW}%" title="Unavailable before ${fmtTime(avail.start_time)}"></div>`;
+    }
+    if (afterL < 100) {
+      overlays += `<div class="gantt-avail-overlay gantt-avail-restricted" style="left:${afterL}%;width:${100 - afterL}%" title="Unavailable after ${fmtTime(avail.end_time)}"></div>`;
+    }
+    return overlays;
+  }
+
+  return ''; // available all day — no overlay
+}
+
+function timeToDecimal(timeStr) {
+  if (!timeStr) return 0;
+  const [h, m] = timeStr.split(':').map(Number);
+  return h + m / 60;
+}
+
+function getEmpName(empId) {
+  const emp = employees.find(e => e.id === empId);
+  return emp ? `${emp.first_name} ${emp.last_name}` : 'Employee';
 }
 
 function buildShiftBar(shift, emp) {
