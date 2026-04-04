@@ -3,11 +3,7 @@
    roster.js
 ══════════════════════════════════════════════════════ */
 
-let shifts = JSON.parse(localStorage.getItem('wf_shifts') || '[]').map(s => ({
-  ...s,
-  start_time: s.start_time ? s.start_time.slice(0, 5) : s.start_time,
-  end_time:   s.end_time   ? s.end_time.slice(0, 5)   : s.end_time,
-}));
+let shifts = JSON.parse(localStorage.getItem('wf_shifts') || '[]');
 let _currentWeekStart = getWeekStart(localDateStr(new Date()));
 let _activeDay        = localDateStr(new Date());
 let _assignPopover    = null; // { shiftId, el }
@@ -49,17 +45,6 @@ async function dbLoadAvailability() {
   });
 }
 
-// Strip seconds and timezone offset from time strings returned by Supabase
-// e.g. "07:00:00+11" or "07:00:00" → "07:00"
-function sanitiseTime(t) {
-  if (!t) return t;
-  return t.slice(0, 5);
-}
-
-function sanitiseShift(s) {
-  return { ...s, start_time: sanitiseTime(s.start_time), end_time: sanitiseTime(s.end_time) };
-}
-
 async function dbLoadShifts(weekStart, weekEnd) {
   if (!_businessId) return;
   const { data, error } = await _supabase
@@ -68,7 +53,7 @@ async function dbLoadShifts(weekStart, weekEnd) {
     .gte('date', weekStart).lte('date', weekEnd);
   if (error) { console.error('Load shifts failed:', error); return; }
   const other = shifts.filter(s => s.date < weekStart || s.date > weekEnd);
-  shifts = [...other, ...(data || []).map(sanitiseShift)];
+  shifts = [...other, ...(data || [])];
   localStorage.setItem('wf_shifts', JSON.stringify(shifts));
 }
 
