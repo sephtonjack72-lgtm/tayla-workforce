@@ -983,50 +983,20 @@ async function handleTeamInviteToken() {
 }
 
 // ══════════════════════════════════════════════════════
-//  VISIBILITY — refresh data when returning to tab
+//  VISIBILITY — reload page when returning to tab
 // ══════════════════════════════════════════════════════
 
 let _lastVisible = Date.now();
 
-document.addEventListener('visibilitychange', async () => {
+document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     _lastVisible = Date.now();
     return;
   }
 
-  if (!_appReady || !_businessId) return;
-
+  // If away more than 5 seconds, reload the page cleanly
   const awayMs = Date.now() - _lastVisible;
-
-  // Always re-render DOM — it may have been cleared by browser memory optimisation
-  renderDashboard();
-  renderEmployees();
-  if (typeof renderRosterFromMemory === 'function') renderRosterFromMemory();
-  if (typeof renderTimesheetsFromMemory === 'function') renderTimesheetsFromMemory();
-
-  // If away more than 60 seconds — also re-fetch from Supabase
-  if (awayMs >= 60000) {
-    _shiftsLoadedRange     = null;
-    _timesheetsLoadedRange = null;
-
-    const today     = localDateStr(new Date());
-    const weekStart = getWeekStart(today);
-    const weekEnd   = getWeekDates(weekStart)[6];
-
-    await Promise.all([
-      dbLoadEmployees(),
-      typeof _dbLoadShiftsRaw === 'function' ? _dbLoadShiftsRaw(weekStart, weekEnd) : Promise.resolve(),
-      typeof _dbLoadTimesheetsRaw === 'function' ? _dbLoadTimesheetsRaw(weekStart, weekEnd) : Promise.resolve(),
-      typeof dbLoadAvailability === 'function' ? dbLoadAvailability() : Promise.resolve(),
-    ]);
-
-    _shiftsLoadedRange     = `${weekStart}:${weekEnd}`;
-    _timesheetsLoadedRange = `${weekStart}:${weekEnd}`;
-
-    // Re-render again with fresh data
-    renderDashboard();
-    renderEmployees();
-    if (typeof renderRosterFromMemory === 'function') renderRosterFromMemory();
-    if (typeof renderTimesheetsFromMemory === 'function') renderTimesheetsFromMemory();
+  if (awayMs > 5000 && _appReady) {
+    window.location.reload();
   }
 });
