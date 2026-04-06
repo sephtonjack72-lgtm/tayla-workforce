@@ -1282,55 +1282,57 @@ function getPeriodRange(period) {
 
 async function loadFranchiseAnalyticsData() {
   const { start, end } = getPeriodRange(_analyticsPeriod);
-  const supabase = _supabase;
-
-  // Load data for all franchises + head office
   const allBizIds = [_ownerBusinessId, ..._franchises.map(f => f.id)].filter(Boolean);
-  const results   = [];
+  if (!allBizIds.length) return [];
 
-  for (const bizId of allBizIds) {
-    const biz = bizId === _ownerBusinessId
-      ? { id: bizId, biz_name: 'Head Office' }
-      : _franchises.find(f => f.id === bizId);
-    if (!biz) continue;
+  // Fetch all data in parallel across all businesses
+  const [empsRes, shiftsRes, salesRes] = await Promise.all([
+    _supabase.from('employees').select('*').in('business_id', allBizIds),
+    _supabase.from('shifts').select('*').in('business_id', allBizIds).gte('date', start).lte('date', end),
+    _supabase.from('sales_data').select('*').in('business_id', allBizIds).gte('date', start).lte('date', end),
+  ]);
 
-    // Employees for this business
-    const { data: emps } = await supabase.from('employees').select('*').eq('business_id', bizId);
-    const { data: bizShifts } = await supabase.from('shifts')
-      .select('*').eq('business_id', bizId)
-      .gte('date', start).lte('date', end);
-    const { data: salesRows } = await supabase.from('sales_data')
-      .select('*').eq('business_id', bizId)
-      .gte('date', start).lte('date', end);
+  const allEmps   = empsRes.data  || [];
+  const allShifts = shiftsRes.data || [];
+  const allSales  = salesRes.data  || [];
 
-    // Calculate labour cost
-    let labourCost = 0;
-    let totalHours = 0;
-    (bizShifts || []).forEach(shift => {
-      const emp = (emps || []).find(e => e.id === shift.employee_id);
+  // Build results per business
+  const bizMap = {
+    [_ownerBusinessId]: 'Head Office',
+    ..._franchises.reduce((m, f) => ({ ...m, [f.id]: f.biz_name }), {}),
+  };
+
+  return allBizIds.map(bizId => {
+    const emps      = allEmps.filter(e => e.business_id === bizId);
+    const bizShifts = allShifts.filter(s => s.business_id === bizId);
+    const salesRows = allSales.filter(s => s.business_id === bizId);
+
+    let labourCost = 0, totalHours = 0;
+    bizShifts.forEach(shift => {
+      const emp = emps.find(e => e.id === shift.employee_id);
       if (!emp) return;
       const pay = calcShiftPay(shift, emp);
       labourCost += pay.totalPay;
       totalHours += pay.workedHours;
     });
 
-    // Calculate revenue
-    const revenue = (salesRows || []).reduce((s, r) => s + (r.projected_sales || 0), 0);
+    const revenue = salesRows.reduce((s, r) => {
+      const val = r.actual != null ? Number(r.actual) : (r.projected != null ? Number(r.projected) : 0);
+      return s + (isNaN(val) ? 0 : val);
+    }, 0);
 
-    // SPCH
     const spch = totalHours > 0 ? revenue / totalHours : 0;
 
-    results.push({
-      id:         biz.id,
-      name:       biz.biz_name,
+    return {
+      id: bizId,
+      name: bizMap[bizId] || bizId,
       labourCost,
       revenue,
       spch,
       totalHours,
-      empCount:   (emps || []).filter(e => e.active !== false).length,
-    });
-  }
-  return results;
+      empCount: emps.filter(e => e.active !== false).length,
+    };
+  });
 }
 
 async function renderFranchiseAnalytics() {
