@@ -91,18 +91,31 @@ async function doInviteSignup() {
   if (!email || !pw) { errEl.textContent = 'Please enter your email and a password.'; errEl.style.display = 'block'; return; }
   if (pw.length < 6)  { errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; return; }
 
-  // Try signing up first
-  const { data: signUpData, error: signUpErr } = await _supabase.auth.signUp({ email, password: pw });
+  const { error: signUpErr } = await _supabase.auth.signUp({ email, password: pw });
 
-  if (signUpErr && signUpErr.message.includes('already registered')) {
-    // User exists — sign them in instead
-    const { error: signInErr } = await _supabase.auth.signInWithPassword({ email, password: pw });
-    if (signInErr) { errEl.textContent = 'Account exists — check your password.'; errEl.style.display = 'block'; }
-    return; // onAuthStateChange will fire and call afterLogin
+  if (signUpErr) {
+    if (signUpErr.status === 422 || signUpErr.message.includes('already registered')) {
+      // Try signing in with same password
+      const { error: signInErr } = await _supabase.auth.signInWithPassword({ email, password: pw });
+      if (signInErr) {
+        errEl.textContent = 'This email already has an account. Click "Already have an account? Sign In" and enter your existing password.';
+        errEl.style.display = 'block';
+      }
+    } else {
+      errEl.textContent = signUpErr.message;
+      errEl.style.display = 'block';
+    }
+    return;
   }
-
-  if (signUpErr) { errEl.textContent = signUpErr.message; errEl.style.display = 'block'; return; }
   // onAuthStateChange fires → afterLogin → accepts token → loads app
+}
+
+function switchToSignIn() {
+  const email = document.getElementById('auth-invite-email')?.value;
+  document.getElementById('auth-invite-mode').style.display = 'none';
+  document.getElementById('auth-normal-mode').style.display = 'block';
+  if (email) document.getElementById('auth-email').value = email;
+  document.getElementById('auth-password').focus();
 }
 
 function hideAuth() {
