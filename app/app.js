@@ -51,6 +51,58 @@ document.addEventListener('DOMContentLoaded', async () => {
 function showAuth() {
   document.getElementById('auth-overlay').style.display = 'flex';
   document.getElementById('app-shell').style.display   = 'none';
+
+  // Check for team invite token — show simplified join UI
+  const params = new URLSearchParams(window.location.search);
+  const token  = params.get('team_invite');
+  if (token) {
+    showInviteAuthMode(token);
+  }
+}
+
+async function showInviteAuthMode(token) {
+  // Look up the invite to get the business name and pre-fill email
+  const { data: invite } = await _supabase
+    .from('business_users')
+    .select('email, business_id, businesses!business_id(biz_name)')
+    .eq('invite_token', token)
+    .eq('status', 'pending')
+    .maybeSingle();
+
+  document.getElementById('auth-normal-mode').style.display = 'none';
+  document.getElementById('auth-invite-mode').style.display = 'block';
+
+  if (invite) {
+    const bizName = invite.businesses?.biz_name || 'your team';
+    document.getElementById('auth-invite-biz').textContent  = bizName;
+    document.getElementById('auth-invite-sub').textContent  = "You've been invited to join";
+    if (invite.email) document.getElementById('auth-invite-email').value = invite.email;
+  } else {
+    document.getElementById('auth-invite-biz').textContent = 'your team';
+  }
+}
+
+async function doInviteSignup() {
+  const email  = document.getElementById('auth-invite-email').value.trim();
+  const pw     = document.getElementById('auth-invite-pw').value;
+  const errEl  = document.getElementById('auth-invite-error');
+  errEl.style.display = 'none';
+
+  if (!email || !pw) { errEl.textContent = 'Please enter your email and a password.'; errEl.style.display = 'block'; return; }
+  if (pw.length < 6)  { errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; return; }
+
+  // Try signing up first
+  const { data: signUpData, error: signUpErr } = await _supabase.auth.signUp({ email, password: pw });
+
+  if (signUpErr && signUpErr.message.includes('already registered')) {
+    // User exists — sign them in instead
+    const { error: signInErr } = await _supabase.auth.signInWithPassword({ email, password: pw });
+    if (signInErr) { errEl.textContent = 'Account exists — check your password.'; errEl.style.display = 'block'; }
+    return; // onAuthStateChange will fire and call afterLogin
+  }
+
+  if (signUpErr) { errEl.textContent = signUpErr.message; errEl.style.display = 'block'; return; }
+  // onAuthStateChange fires → afterLogin → accepts token → loads app
 }
 
 function hideAuth() {
