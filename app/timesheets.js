@@ -60,8 +60,8 @@ function renderTimesheets() {
 
   const label = document.getElementById('ts-week-label');
   if (label) {
-    const start = new Date(_tsWeekStart);
-    const end   = new Date(weekEnd);
+    const start = parseLocalDate(_tsWeekStart);
+    const end   = parseLocalDate(weekEnd);
     label.textContent = `${start.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} — ${end.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
   }
 
