@@ -395,16 +395,15 @@ async function executePushPayslips() {
 
       // Save payslip record
       const { error: saveErr } = await _supabase.from('payslips').upsert({
-        business_id:  _businessId,
-        employee_id:  emp.id,
-        week_start:   prevStart,
-        week_end:     prevEnd,
-        gross_pay:    totalGross,
-        tax_withheld: totalTax,
-        super_amount: superAmount,
-        net_pay:      netPay,
-        created_at:   new Date().toISOString(),
-      }, { onConflict: 'business_id,employee_id,week_start' });
+        business_id:      _businessId,
+        employee_id:      emp.id,
+        pay_period_start: prevStart,
+        pay_period_end:   prevEnd,
+        gross_pay:        totalGross,
+        tax_withheld:     totalTax,
+        super_amount:     superAmount,
+        net_pay:          netPay,
+      }, { onConflict: 'business_id,employee_id,pay_period_start' });
 
       if (saveErr) throw new Error(saveErr.message);
 
@@ -414,7 +413,7 @@ async function executePushPayslips() {
         .select('id')
         .eq('business_id', _businessId)
         .eq('employee_id', emp.id)
-        .eq('week_start', prevStart)
+        .eq('pay_period_start', prevStart)
         .maybeSingle();
 
       if (!saved) throw new Error('Could not retrieve saved payslip');
