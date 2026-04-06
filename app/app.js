@@ -1080,9 +1080,9 @@ async function loadBillingPanel() {
   }
 
   // Status display
-  const fmt = (d: Date) => d.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
+  const fmt = (d) => d.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
 
-  const statusMap: Record<string, { badge: string; color: string; detail: string; showSub: boolean; showPortal: boolean }> = {
+  const statusMap = {
     trial: {
       badge: '🎉 Free Trial',
       color: 'var(--accent2)',
@@ -1130,7 +1130,7 @@ async function loadBillingPanel() {
 
 async function startCheckout() {
   const btn = document.getElementById('billing-subscribe-btn') || document.getElementById('billing-banner-btn');
-  if (btn) { btn.textContent = 'Loading…'; (btn as HTMLButtonElement).disabled = true; }
+  if (btn) { btn.textContent = 'Loading…'; btn.disabled = true; }
 
   try {
     const token = _supabase.changedAccessToken || (await _supabase.auth.getSession())?.data?.session?.access_token;
@@ -1145,13 +1145,13 @@ async function startCheckout() {
   } catch (err) {
     toast('Error: ' + err);
   } finally {
-    if (btn) { btn.textContent = 'Subscribe Now'; (btn as HTMLButtonElement).disabled = false; }
+    if (btn) { btn.textContent = 'Subscribe Now'; btn.disabled = false; }
   }
 }
 
 async function openBillingPortal() {
   const btn = document.getElementById('billing-portal-btn');
-  if (btn) { btn.textContent = 'Loading…'; (btn as HTMLButtonElement).disabled = true; }
+  if (btn) { btn.textContent = 'Loading…'; btn.disabled = true; }
 
   try {
     const token = _supabase.changedAccessToken || (await _supabase.auth.getSession())?.data?.session?.access_token;
@@ -1166,7 +1166,7 @@ async function openBillingPortal() {
   } catch (err) {
     toast('Error: ' + err);
   } finally {
-    if (btn) { btn.textContent = 'Manage Billing'; (btn as HTMLButtonElement).disabled = false; }
+    if (btn) { btn.textContent = 'Manage Billing'; btn.disabled = false; }
   }
 }
 
