@@ -10,16 +10,7 @@ let timesheets = JSON.parse(localStorage.getItem('wf_timesheets') || '[]');
 // ══════════════════════════════════════════════════════
 
 async function dbLoadTimesheets(weekStart, weekEnd) {
-  if (!_businessId) return;
-  const { data, error } = await _supabase
-    .from('timesheets').select('*')
-    .eq('business_id', _businessId)
-    .gte('date', weekStart)
-    .lte('date', weekEnd);
-  if (error) { console.error('Load timesheets failed:', error); return; }
-  const other = timesheets.filter(t => t.date < weekStart || t.date > weekEnd);
-  timesheets = [...other, ...(data || [])];
-  localStorage.setItem('wf_timesheets', JSON.stringify(timesheets));
+  await ensureTimesheetsLoaded(weekStart, weekEnd);
 }
 
 async function dbSaveTimesheet(ts) {
@@ -52,6 +43,23 @@ function tsWeekNav(dir) {
   renderTimesheets();
 }
 
+// Instant render from memory — called on tab switch
+function renderTimesheetsFromMemory() {
+  const weekDates = getWeekDates(_tsWeekStart);
+  const weekEnd   = weekDates[6];
+
+  const label = document.getElementById('ts-week-label');
+  if (label) {
+    const start = parseLocalDate(_tsWeekStart);
+    const end   = parseLocalDate(weekEnd);
+    label.textContent = `${start.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} — ${end.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  }
+
+  renderTimesheetKPIs(weekDates);
+  renderTimesheetTable(weekDates);
+}
+
+// Full render — fetches from Supabase if week not loaded, then renders
 function renderTimesheets() {
   const weekDates = getWeekDates(_tsWeekStart);
   const weekEnd   = weekDates[6];
@@ -65,7 +73,10 @@ function renderTimesheets() {
 
   renderTimesheetKPIs(weekDates);
 
-  dbLoadTimesheets(_tsWeekStart, weekEnd).then(() => renderTimesheetTable(weekDates));
+  ensureTimesheetsLoaded(_tsWeekStart, weekEnd).then(() => {
+    markTimesheetsLoaded(_tsWeekStart, weekEnd);
+    renderTimesheetTable(weekDates);
+  });
 }
 
 function renderTimesheetTable(weekDates) {
