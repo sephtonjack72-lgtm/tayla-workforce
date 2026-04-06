@@ -138,9 +138,9 @@ async function applyProfile(profile) {
 
   renderDashboard();
   renderEmployees();
-  renderRosterFromMemory();
+  if (typeof renderRosterFromMemory === 'function') renderRosterFromMemory();
   renderSales();
-  renderTimesheetsFromMemory();
+  if (typeof renderTimesheetsFromMemory === 'function') renderTimesheetsFromMemory();
   if (typeof initAwardPage === 'function') initAwardPage();
 }
 
@@ -235,10 +235,10 @@ function showPage(id) {
 
   if (id === 'dashboard')  renderDashboard();
   if (id === 'employees')  renderEmployees();
-  if (id === 'roster')     renderRosterFromMemory();
+  if (id === 'roster'     && typeof renderRosterFromMemory    === 'function') renderRosterFromMemory();
   if (id === 'sales')      renderSales();
-  if (id === 'timesheets') renderTimesheetsFromMemory();
-  if (id === 'awards')     initAwardPage();
+  if (id === 'timesheets' && typeof renderTimesheetsFromMemory === 'function') renderTimesheetsFromMemory();
+  if (id === 'awards'     && typeof initAwardPage              === 'function') initAwardPage();
 }
 
 // ══════════════════════════════════════════════════════
