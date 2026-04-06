@@ -336,13 +336,24 @@ function renderDashboard() {
   }
 
   const phEl = document.getElementById('dash-public-holidays');
+  const phRateEl = document.getElementById('dash-ph-rate');
   if (phEl) {
+    // Get PH multiplier from custom award if active, otherwise MA000003 default (2.5)
+    const phMultiplier = (typeof _customAward !== 'undefined' && _customAward?.publicHoliday)
+      ? _customAward.publicHoliday
+      : 2.5;
+    const phPct  = Math.round(phMultiplier * 100) + '%';
+    const awardName = (typeof _customAward !== 'undefined' && _customAward?.name)
+      ? _customAward.name
+      : 'MA000003';
+    if (phRateEl) phRateEl.textContent = `${awardName} · ${phPct} rate`;
+
     const upcoming = ALL_PUBLIC_HOLIDAYS.filter(d => d >= today).slice(0, 3);
     phEl.innerHTML = upcoming.length
       ? upcoming.map(d => `
           <div style="display:flex;justify-content:space-between;padding:8px 20px;border-bottom:1px solid var(--border);font-size:13px;">
             <span>${parseLocalDate(d).toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long'})}</span>
-            <span class="badge badge-red">250%</span>
+            <span class="badge badge-red">${phPct}</span>
           </div>`).join('')
       : '<div style="padding:16px 20px;color:var(--text3);font-size:13px;">No upcoming public holidays.</div>';
   }
