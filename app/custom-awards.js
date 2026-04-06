@@ -214,7 +214,7 @@ function renderCustomAwardEditor() {
         <span class="card-title">Custom Award Builder</span>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-ghost btn-sm" onclick="resetCustomAward()">Reset to Defaults</button>
-          <button class="btn btn-primary btn-sm" onclick="saveCustomAward()">💾 Save &amp; Activate</button>
+          <button class="btn btn-primary btn-sm" id="ca-save-btn" onclick="saveCustomAward()">💾 Save &amp; Activate</button>
         </div>
       </div>
       <div class="card-body">
@@ -361,7 +361,7 @@ function resetCustomAward() {
 async function saveCustomAward() {
   if (!_businessId) { toast('Not connected'); return; }
 
-  const btn = document.querySelector('#awards-page-content .btn-primary');
+  const btn = document.getElementById('ca-save-btn');
   if (btn) { btn.textContent = 'Saving…'; btn.disabled = true; }
 
   const { error } = await _supabase.from('businesses').update({
@@ -371,11 +371,11 @@ async function saveCustomAward() {
 
   if (error) {
     toast('⚠ Save failed: ' + error.message);
+    console.error('saveCustomAward error:', error);
     if (btn) { btn.textContent = '💾 Save & Activate'; btn.disabled = false; }
     return;
   }
 
-  // Update local business profile
   _businessProfile.award_type   = 'custom';
   _businessProfile.custom_award = _customAward;
   _awardMode = 'custom';
