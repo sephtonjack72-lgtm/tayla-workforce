@@ -264,3 +264,198 @@ async function approveAllPending() {
   renderTimesheets();
   toast(`✓ Approved ${pending.length} timesheets`);
 }
+
+// ══════════════════════════════════════════════════════
+//  PUSH PAYSLIPS — PREVIOUS WEEK (BULK)
+// ══════════════════════════════════════════════════════
+
+function getPreviousWeekRange() {
+  const today = new Date().toISOString().split('T')[0];
+  const thisMonday = getWeekStart(today);
+  const d = parseLocalDate(thisMonday);
+  d.setDate(d.getDate() - 7);
+  const prevStart = localDateStr(d);
+  const prevDates = getWeekDates(prevStart);
+  return { prevStart, prevEnd: prevDates[6], prevDates };
+}
+
+async function openPushPayslipsModal() {
+  const { prevStart, prevEnd, prevDates } = getPreviousWeekRange();
+
+  // Load timesheets for the previous week fresh
+  await dbLoadTimesheets(prevStart, prevEnd);
+
+  const activeEmps = employees.filter(e => e.active !== false);
+  const modal = document.getElementById('push-payslips-modal');
+  if (!modal) return;
+
+  const periodLabel = `${new Date(prevStart).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} — ${new Date(prevEnd).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+
+  // Build preview rows
+  const rows = activeEmps.map(emp => {
+    const empTs = timesheets.filter(t =>
+      t.employee_id === emp.id &&
+      prevDates.includes(t.date) &&
+      t.status === 'approved'
+    );
+
+    let hours = 0, gross = 0;
+    empTs.forEach(ts => {
+      if (ts.start_time && ts.end_time) {
+        const pay = calcShiftPay({ date: ts.date, start_time: ts.start_time, end_time: ts.end_time, break_mins: ts.break_mins }, emp);
+        hours += pay.workedHours;
+        gross += pay.totalPay;
+      }
+    });
+
+    const connected = !!emp.tayla_user_id;
+    const hasTs     = empTs.length > 0;
+    const initials  = ((emp.first_name?.[0] || '') + (emp.last_name?.[0] || '')).toUpperCase();
+
+    let statusBadge;
+    if (!hasTs)     statusBadge = '<span class="badge badge-grey">No approved timesheets</span>';
+    else if (!connected) statusBadge = '<span class="badge badge-yellow">Not connected</span>';
+    else            statusBadge = '<span class="badge badge-green">Ready to push</span>';
+
+    return { emp, hours, gross, hasTs, connected, initials, statusBadge };
+  });
+
+  const readyCount = rows.filter(r => r.hasTs && r.connected).length;
+
+  document.getElementById('push-payslips-period').textContent = periodLabel;
+  document.getElementById('push-payslips-ready').textContent  = readyCount;
+  document.getElementById('push-payslips-list').innerHTML = rows.map(r => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="avatar" style="width:30px;height:30px;font-size:11px;${!r.hasTs || !r.connected ? 'opacity:.45;' : ''}">${r.initials}</div>
+        <div>
+          <div style="font-weight:600;font-size:13px;">${r.emp.first_name} ${r.emp.last_name}</div>
+          <div style="font-size:11px;color:var(--text3);">${r.hasTs ? r.hours.toFixed(1) + 'h · ' + fmt(r.gross) : 'No data'}</div>
+        </div>
+      </div>
+      <div id="push-row-status-${r.emp.id}">${r.statusBadge}</div>
+    </div>
+  `).join('');
+
+  document.getElementById('push-payslips-send-btn').disabled  = readyCount === 0;
+  document.getElementById('push-payslips-send-btn').textContent = `📲 Push ${readyCount} Payslip${readyCount !== 1 ? 's' : ''}`;
+  document.getElementById('push-payslips-result').innerHTML = '';
+
+  modal.classList.add('show');
+}
+
+async function executePushPayslips() {
+  const { prevStart, prevEnd, prevDates } = getPreviousWeekRange();
+  const { data: { session } } = await _supabase.auth.getSession();
+  const token = session?.access_token;
+
+  const btn    = document.getElementById('push-payslips-send-btn');
+  const result = document.getElementById('push-payslips-result');
+  btn.disabled    = true;
+  btn.textContent = 'Pushing…';
+  result.innerHTML = '';
+
+  const activeEmps = employees.filter(e => e.active !== false);
+  let sent = 0, skipped = 0, failed = 0;
+
+  for (const emp of activeEmps) {
+    const rowStatus = document.getElementById(`push-row-status-${emp.id}`);
+
+    const empTs = timesheets.filter(t =>
+      t.employee_id === emp.id &&
+      prevDates.includes(t.date) &&
+      t.status === 'approved'
+    );
+
+    if (!empTs.length) { skipped++; continue; }
+
+    if (!emp.tayla_user_id) {
+      skipped++;
+      if (rowStatus) rowStatus.innerHTML = '<span class="badge badge-grey">Not connected</span>';
+      continue;
+    }
+
+    if (rowStatus) rowStatus.innerHTML = '<span class="badge badge-grey">Sending…</span>';
+
+    try {
+      // Calculate payslip
+      const shiftBreakdown = empTs.map(ts => ({
+        ts,
+        pay: calcShiftPay({ date: ts.date, start_time: ts.start_time, end_time: ts.end_time, break_mins: ts.break_mins }, emp),
+      }));
+
+      const grossPay     = +shiftBreakdown.reduce((s, r) => s + r.pay.grossPay, 0).toFixed(2);
+      const laundryAllow = +shiftBreakdown.reduce((s, r) => s + r.pay.laundryAllowance, 0).toFixed(2);
+      const totalGross   = +(grossPay + laundryAllow).toFixed(2);
+      const paygWithheld = calcPAYG(totalGross, emp.tax_free_threshold !== false, emp.residency_status || 'australian');
+      const medicare     = calcMedicare(totalGross, emp.residency_status || 'australian');
+      const totalTax     = paygWithheld + medicare;
+      const superAmount  = calcSuper(grossPay);
+      const netPay       = +(totalGross - totalTax).toFixed(2);
+
+      // Save payslip record
+      const { error: saveErr } = await _supabase.from('payslips').upsert({
+        business_id:  _businessId,
+        employee_id:  emp.id,
+        week_start:   prevStart,
+        week_end:     prevEnd,
+        gross_pay:    totalGross,
+        tax_withheld: totalTax,
+        super_amount: superAmount,
+        net_pay:      netPay,
+        created_at:   new Date().toISOString(),
+      }, { onConflict: 'business_id,employee_id,week_start' });
+
+      if (saveErr) throw new Error(saveErr.message);
+
+      // Fetch the saved payslip ID
+      const { data: saved } = await _supabase
+        .from('payslips')
+        .select('id')
+        .eq('business_id', _businessId)
+        .eq('employee_id', emp.id)
+        .eq('week_start', prevStart)
+        .maybeSingle();
+
+      if (!saved) throw new Error('Could not retrieve saved payslip');
+
+      // Push to Tayla
+      const res  = await fetch(
+        'https://whedwekxzjfqwjuoarid.supabase.co/functions/v1/push-payslip',
+        {
+          method:  'POST',
+          headers: {
+            'Content-Type':  'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({ payslip_id: saved.id }),
+        }
+      );
+
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Push failed');
+
+      sent++;
+      if (rowStatus) rowStatus.innerHTML = '<span class="badge badge-green">✓ Sent</span>';
+
+    } catch (err) {
+      failed++;
+      if (rowStatus) rowStatus.innerHTML = `<span class="badge badge-red" title="${err.message}">✕ Failed</span>`;
+      console.error(`Push payslip failed for ${emp.first_name}:`, err);
+    }
+  }
+
+  // Summary
+  const parts = [];
+  if (sent)    parts.push(`<span style="color:var(--success);">✓ ${sent} sent</span>`);
+  if (skipped) parts.push(`<span style="color:var(--text3);">${skipped} skipped</span>`);
+  if (failed)  parts.push(`<span style="color:var(--danger);">✕ ${failed} failed</span>`);
+
+  result.innerHTML = `
+    <div style="margin-top:16px;padding:12px 14px;background:var(--surface2);border-radius:8px;font-size:13px;font-weight:500;">
+      ${parts.join(' · ')}
+    </div>`;
+
+  btn.textContent = 'Done';
+  toast(`Payslips pushed: ${sent} sent${failed ? ', ' + failed + ' failed' : ''}`);
+}
