@@ -378,10 +378,7 @@ function buildGanttDay(date, dayShifts, activeEmps) {
         ${buildUnassignedRow(date, unassignedShifts)}
 
         <!-- ── EMPLOYEE ROWS ── -->
-        ${ordered.length
-          ? ordered.map(emp => buildGanttRow(emp, date, dayShifts.filter(s => s.employee_id === emp.id))).join('')
-          : `<div style="padding:32px;text-align:center;color:var(--text3);font-size:13px;">No active employees yet — add employees first.</div>`
-        }
+        ${ordered.map(emp => buildGanttRow(emp, date, dayShifts.filter(s => s.employee_id === emp.id))).join('')}
       </div>
     </div>
   `;
@@ -643,14 +640,19 @@ function openAssignPopover(shiftId, barEl) {
         const pay        = calcShiftPay({ ...shift, employee_id: emp.id }, emp);
         const empAvail   = availabilityData[emp.id];
         const avail      = empAvail?.[dow];
-        const unavailable = avail && avail.available === false;
+                const unavailable = avail && avail.available === false;
         const restricted  = avail && avail.available === true && avail.start_time && avail.end_time;
+        const availNote   = unavailable
+          ? ' · <span style="color:var(--danger);font-weight:600;">Unavailable</span>'
+          : restricted
+            ? ' · <span style="color:var(--warning);font-weight:600;">' + fmtTime(avail.start_time) + '–' + fmtTime(avail.end_time) + '</span>'
+            : '';
         return `
           <div class="assign-emp-row ${isAssigned?'assigned':''}" onclick="assignShift('${shiftId}','${emp.id}')">
             <div class="avatar" style="width:28px;height:28px;font-size:10px;flex-shrink:0;${isAssigned?'background:var(--success);':unavailable?'opacity:.5;':''}">${initials}</div>
             <div style="flex:1;min-width:0;">
               <div style="font-weight:600;font-size:12px;${unavailable?'color:var(--text2);font-style:italic;':''}">${emp.first_name} ${emp.last_name}</div>
-              <div style="font-size:10px;color:var(--text3);">${emp.employment_type||'casual'}${unavailable?' · <span style="color:var(--danger);font-weight:600;">Unavailable</span>':restricted?` · <span style="color:var(--warning);font-weight:600;">${fmtTime(avail.start_time)}–${fmtTime(avail.end_time)}</span>`:''}</div>
+              <div style="font-size:10px;color:var(--text3);">${emp.employment_type||'casual'}${availNote}</div>
             </div>
             <div style="text-align:right;font-size:11px;">
               <div class="mono" style="font-weight:700;color:var(--success);">${fmt(pay.totalPay)}</div>
