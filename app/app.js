@@ -1282,7 +1282,20 @@ function getPeriodRange(period) {
 
 async function loadFranchiseAnalyticsData() {
   const { start, end } = getPeriodRange(_analyticsPeriod);
-  const allBizIds = [_ownerBusinessId, ..._franchises.map(f => f.id)].filter(Boolean);
+
+  // Owners see all franchises + head office, franchise users see only their business
+  let allBizIds, bizMap;
+  if (_userRole === 'owner') {
+    allBizIds = [_ownerBusinessId, ..._franchises.map(f => f.id)].filter(Boolean);
+    bizMap = {
+      [_ownerBusinessId]: 'Head Office',
+      ..._franchises.reduce((m, f) => ({ ...m, [f.id]: f.biz_name }), {}),
+    };
+  } else {
+    allBizIds = [_businessId].filter(Boolean);
+    bizMap = { [_businessId]: _businessProfile?.biz_name || 'My Business' };
+  }
+
   if (!allBizIds.length) return [];
 
   // Fetch all data in parallel across all businesses
@@ -1297,11 +1310,6 @@ async function loadFranchiseAnalyticsData() {
   const allSales  = salesRes.data  || [];
 
   // Build results per business
-  const bizMap = {
-    [_ownerBusinessId]: 'Head Office',
-    ..._franchises.reduce((m, f) => ({ ...m, [f.id]: f.biz_name }), {}),
-  };
-
   return allBizIds.map(bizId => {
     const emps      = allEmps.filter(e => e.business_id === bizId);
     const bizShifts = allShifts.filter(s => s.business_id === bizId);
@@ -1339,15 +1347,10 @@ async function renderFranchiseAnalytics() {
   const el = document.getElementById('analytics-chart');
   if (!el) return;
 
-  // Only show for owners with franchises
+  // Only show for owners with franchises, or franchise users
   const analyticsSection = document.getElementById('franchise-analytics');
   if (!analyticsSection) return;
-  if (_userRole !== 'owner' || !_franchises?.length) {
-    analyticsSection.style.display = 'none';
-    return;
-  }
-  // Also hide when owner is viewing a specific franchise (not head office)
-  if (_businessId !== _ownerBusinessId) {
+  if (_userRole !== 'owner' && _userRole !== 'franchise') {
     analyticsSection.style.display = 'none';
     return;
   }
