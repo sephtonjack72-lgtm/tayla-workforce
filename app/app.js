@@ -359,6 +359,10 @@ function goToSalesProjection(date) {
 //  UTILS
 // ══════════════════════════════════════════════════════
 
+function openModal(id) {
+  document.getElementById(id)?.classList.add('show');
+}
+
 function toggleUserMenu() {
   const d = document.getElementById('user-dropdown');
   if (d) d.style.display = d.style.display === 'none' ? 'block' : 'none';
