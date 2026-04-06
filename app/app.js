@@ -922,3 +922,44 @@ async function handleTeamInviteToken() {
   if (!token || !_currentUser) return;
   await acceptTeamInviteToken(token);
 }
+
+// ══════════════════════════════════════════════════════
+//  VISIBILITY — refresh data when returning to tab
+// ══════════════════════════════════════════════════════
+
+let _lastVisible = Date.now();
+
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden) {
+    _lastVisible = Date.now();
+    return;
+  }
+
+  // Only refresh if away more than 60 seconds and app is ready
+  const awayMs = Date.now() - _lastVisible;
+  if (awayMs < 60000 || !_appReady || !_businessId) return;
+
+  // Reset loaded ranges to force fresh fetch
+  _shiftsLoadedRange     = null;
+  _timesheetsLoadedRange = null;
+
+  const today     = localDateStr(new Date());
+  const weekStart = getWeekStart(today);
+  const weekEnd   = getWeekDates(weekStart)[6];
+
+  await Promise.all([
+    dbLoadEmployees(),
+    typeof _dbLoadShiftsRaw === 'function' ? _dbLoadShiftsRaw(weekStart, weekEnd) : Promise.resolve(),
+    typeof _dbLoadTimesheetsRaw === 'function' ? _dbLoadTimesheetsRaw(weekStart, weekEnd) : Promise.resolve(),
+    typeof dbLoadAvailability === 'function' ? dbLoadAvailability() : Promise.resolve(),
+  ]);
+
+  _shiftsLoadedRange     = `${weekStart}:${weekEnd}`;
+  _timesheetsLoadedRange = `${weekStart}:${weekEnd}`;
+
+  // Re-render current page
+  renderDashboard();
+  renderEmployees();
+  if (typeof renderRosterFromMemory === 'function') renderRosterFromMemory();
+  if (typeof renderTimesheetsFromMemory === 'function') renderTimesheetsFromMemory();
+});
