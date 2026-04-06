@@ -896,7 +896,14 @@ async function generateTeamInvite() {
   const token   = crypto.randomUUID().replace(/-/g,'') + crypto.randomUUID().replace(/-/g,'');
   const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const { error } = await _supabase.from('business_users').upsert({
+  // Delete any existing invite for this email+business (revoked or pending)
+  await _supabase.from('business_users')
+    .delete()
+    .eq('business_id', targetBizId)
+    .eq('email', email)
+    .in('status', ['pending', 'revoked']);
+
+  const { error } = await _supabase.from('business_users').insert({
     business_id:    targetBizId,
     email,
     role,
@@ -904,7 +911,7 @@ async function generateTeamInvite() {
     status:         'pending',
     invite_token:   token,
     invite_expires: expires,
-  }, { onConflict: 'business_id,email' });
+  });
 
   if (error) { toast('Error: ' + error.message); return; }
 
