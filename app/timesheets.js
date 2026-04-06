@@ -270,13 +270,12 @@ async function approveAllPending() {
 // ══════════════════════════════════════════════════════
 
 function getPreviousWeekRange() {
-  const today = localDateStr(new Date());
-  const thisMonday = getWeekStart(today);
-  const d = parseLocalDate(thisMonday);
-  d.setDate(d.getDate() - 7);
-  const prevStart = localDateStr(d);
-  const prevDates = getWeekDates(prevStart);
-  return { prevStart, prevEnd: prevDates[6], prevDates };
+  const weekDates = getWeekDates(_tsWeekStart);
+  return {
+    prevStart: _tsWeekStart,
+    prevEnd:   weekDates[6],
+    prevDates: weekDates,
+  };
 }
 
 async function openPushPayslipsModal() {
