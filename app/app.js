@@ -197,16 +197,25 @@ async function afterLogin() {
   // Check if they're already an active team member
   const { data: membership } = await _supabase
     .from('business_users')
-    .select('*, businesses(*)')
+    .select('*')
     .eq('user_id', _currentUser.id)
     .eq('status', 'active')
     .maybeSingle();
 
   if (membership) {
-    _businessProfile = membership.businesses;
+    // Fetch the business separately
+    const { data: bizData } = await _supabase
+      .from('businesses')
+      .select('*')
+      .eq('id', membership.business_id)
+      .maybeSingle();
+
+    if (!bizData) { toast('Could not load business data'); return; }
+
+    _businessProfile = bizData;
     _businessId      = membership.business_id;
     _userRole        = membership.role;
-    await applyProfile(membership.businesses);
+    await applyProfile(bizData);
     hideAuth();
     return;
   }
