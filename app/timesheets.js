@@ -170,7 +170,7 @@ function renderTimesheetTable(weekDates) {
         <td>${statusBadge(ts?.status || 'rostered')}</td>
         <td>
           <div class="flex-gap">
-            ${ts?.status === 'pending' ? `
+            ${ts?.status === 'pending' && canAccess('approve_ts') ? `
               <button class="btn btn-success btn-sm" onclick="approveTimesheet('${ts.id}')">✓ Approve</button>
               <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="rejectTimesheet('${ts.id}')">✕</button>
             ` : ''}
@@ -236,6 +236,7 @@ async function updateTsEntry(employeeId, date, field, value) {
 }
 
 async function approveTimesheet(id) {
+  if (!canAccess('approve_ts')) { toast('You do not have permission to approve timesheets'); return; }
   const ts = timesheets.find(t => t.id === id);
   if (!ts) return;
   ts.status = 'approved';
@@ -272,6 +273,7 @@ async function createTimesheetFromShift(employeeId, date) {
 }
 
 async function approveAllPending() {
+  if (!canAccess('approve_ts')) { toast('You do not have permission to approve timesheets'); return; }
   const weekDates = getWeekDates(_tsWeekStart);
   const pending = timesheets.filter(t => weekDates.includes(t.date) && t.status === 'pending');
   for (const ts of pending) {
@@ -297,6 +299,7 @@ function getPreviousWeekRange() {
 }
 
 async function openPushPayslipsModal() {
+  if (!canAccess('push_payslip')) { toast('You do not have permission to push payslips'); return; }
   const { prevStart, prevEnd, prevDates } = getPreviousWeekRange();
 
   // Load timesheets for the previous week fresh
