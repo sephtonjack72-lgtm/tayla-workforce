@@ -92,6 +92,14 @@ function renderAwardPage() {
         <span style="display:flex;align-items:center;font-size:12px;color:var(--success);gap:4px;">
           ✓ Custom award active
         </span>` : ''}
+      ${isMa && _businessProfile?.award_type === 'ma000003' ? `
+        <span style="display:flex;align-items:center;font-size:12px;color:var(--success);gap:4px;">
+          ✓ MA000003 active
+        </span>` : ''}
+      ${isMa && _businessProfile?.award_type === 'custom' ? `
+        <button id="ma-save-btn" class="btn btn-primary" onclick="saveMa000003Award()" style="font-size:13px;">
+          ✓ Save & Activate MA000003
+        </button>` : ''}
     </div>
 
     ${isMa ? renderMA000003View() : renderCustomAwardEditor()}
@@ -323,6 +331,27 @@ function renderCustomAwardEditor() {
 
 function setAwardMode(mode) {
   _awardMode = mode;
+  renderAwardPage();
+}
+
+async function saveMa000003Award() {
+  if (!_businessId) { toast('Not connected'); return; }
+  const btn = document.getElementById('ma-save-btn');
+  if (btn) { btn.textContent = 'Saving…'; btn.disabled = true; }
+
+  const { error } = await _supabase.from('businesses').update({
+    award_type: 'ma000003',
+  }).eq('id', _businessId);
+
+  if (error) {
+    toast('⚠ Save failed: ' + error.message);
+    if (btn) { btn.textContent = '✓ Save & Activate MA000003'; btn.disabled = false; }
+    return;
+  }
+
+  _businessProfile.award_type = 'ma000003';
+  _awardMode = 'ma000003';
+  toast('Fast Food Award MA000003 activated ✓');
   renderAwardPage();
 }
 
