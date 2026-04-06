@@ -211,14 +211,44 @@ async function afterLogin() {
     return;
   }
 
-  // If there's a team invite token, accept it now before showing setup
+  // If there's a team invite token, try to accept it
   if (teamToken) {
     const accepted = await acceptTeamInviteToken(teamToken);
-    if (accepted) return; // acceptTeamInviteToken will reload the page
+    if (accepted) return;
+    // Token failed — show friendly message instead of business setup
+    showInviteErrorScreen();
+    return;
   }
 
   // New user with no business and no invite — show business setup
   showBusinessSetup();
+}
+
+function showInviteErrorScreen() {
+  document.getElementById('auth-overlay').style.display  = 'none';
+  document.getElementById('setup-overlay').style.display = 'none';
+  document.getElementById('app-shell').style.display     = 'none';
+  // Show a simple message
+  let el = document.getElementById('invite-error-screen');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'invite-error-screen';
+    el.style.cssText = 'position:fixed;inset:0;background:#0f1623;display:flex;align-items:center;justify-content:center;';
+    el.innerHTML = `
+      <div style="background:#1e2235;border-radius:16px;padding:40px 36px;max-width:420px;text-align:center;color:#fff;">
+        <div style="font-size:48px;margin-bottom:16px;">⚠️</div>
+        <div style="font-size:20px;font-weight:700;margin-bottom:8px;">Invite Link Issue</div>
+        <div style="font-size:14px;color:rgba(255,255,255,.6);line-height:1.6;margin-bottom:24px;">
+          This invite link has expired or already been used. Ask your employer to send a new invite link.
+        </div>
+        <button onclick="window.location.href=window.location.pathname"
+          style="background:#d4a017;color:#111;border:none;padding:12px 24px;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px;">
+          Back to Sign In
+        </button>
+      </div>`;
+    document.body.appendChild(el);
+  }
+  el.style.display = 'flex';
 }
 
 async function applyProfile(profile) {
