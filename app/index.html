@@ -546,9 +546,10 @@
 
     <!-- Sub-tabs -->
     <div style="display:flex;border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;">
-      <button class="acct-tab active" id="acct-tab-profile"  onclick="switchAcctTab('profile')">👤 Profile</button>
+      <button class="acct-tab" id="acct-tab-profile"  onclick="switchAcctTab('profile')">👤 Profile</button>
       <button class="acct-tab" id="acct-tab-team"     onclick="switchAcctTab('team')" style="display:none;">👥 Team</button>
       <button class="acct-tab" id="acct-tab-business" onclick="switchAcctTab('business')" style="display:none;">🏢 Business</button>
+      <button class="acct-tab" id="acct-tab-billing"  onclick="switchAcctTab('billing')" style="display:none;">💳 Billing</button>
     </div>
 
     <!-- Content -->
@@ -664,7 +665,36 @@
         <button class="btn btn-primary" style="margin-top:16px;" onclick="saveBusinessSettings()">Save Changes</button>
       </div>
 
+      <!-- Billing tab -->
+      <div id="acct-panel-billing" style="display:none;">
+        <div id="billing-status-card" style="padding:20px;background:var(--surface2);border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <div style="font-weight:700;font-size:14px;">Subscription</div>
+            <div id="billing-status-badge"></div>
+          </div>
+          <div id="billing-status-detail" style="font-size:13px;color:var(--text2);line-height:1.6;"></div>
+        </div>
+        <div id="billing-breakdown" style="margin-bottom:20px;"></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-primary" id="billing-subscribe-btn" onclick="startCheckout()" style="display:none;">
+            💳 Subscribe Now
+          </button>
+          <button class="btn btn-ghost" id="billing-portal-btn" onclick="openBillingPortal()" style="display:none;">
+            Manage Billing
+          </button>
+        </div>
+      </div>
+
     </div>
+  </div>
+</div>
+
+<!-- Billing/Trial banner -->
+<div id="billing-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:999;padding:12px 24px;display:none;align-items:center;justify-content:space-between;font-size:13px;font-weight:500;">
+  <span id="billing-banner-msg"></span>
+  <div style="display:flex;gap:10px;align-items:center;">
+    <button class="btn btn-sm" id="billing-banner-btn" onclick="startCheckout()">Subscribe Now</button>
+    <button style="background:none;border:none;color:inherit;cursor:pointer;opacity:.6;font-size:18px;padding:0 4px;" onclick="document.getElementById('billing-banner').style.display='none'">×</button>
   </div>
 </div>
 
