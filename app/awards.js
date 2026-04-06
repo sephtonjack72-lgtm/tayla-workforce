@@ -1,6 +1,6 @@
 /* ══════════════════════════════════════════════════════
    Tayla Workforce — Award Engine
-   Fast Food Industry Award MA000003
+   Fast Food Industry Award MA000003 + Custom Award support
    awards.js
 ══════════════════════════════════════════════════════ */
 
@@ -44,13 +44,13 @@ const LAUNDRY_ALLOWANCE = {
   daily:  1.25,
 };
 
-// ── Minimum engagement (hours)
+// ── Minimum engagement (hours) — MA000003
 const MIN_ENGAGEMENT_HOURS = 3;
 
 // ── Break rules
 const BREAK_RULES = {
   paidRest:   { minShiftHours: 4,  duration: 10, paid: true  }, // 10 min paid rest for 4+ hrs
-  mealBreak:  { minShiftHours: 5,  duration: 30, paid: false }, // 30 min unpaid meal for 5+ hrs (more than 5)
+  mealBreak:  { minShiftHours: 5,  duration: 30, paid: false }, // 30 min unpaid meal for 5+ hrs
 };
 
 // ── Public holidays (Australian national + VIC, update annually)
@@ -107,20 +107,33 @@ function getJuniorMultiplier(age) {
   return JUNIOR_RATES[key] || 1.00;
 }
 
+// ── Returns effective base rate, respecting custom award if active
 function getBaseRate(employee) {
-  // Use custom rate if set, otherwise award base
-  const base = employee.hourly_rate || AWARD_BASE_RATE;
+  let base;
+  if (employee.hourly_rate) {
+    // Employee-specific override always wins
+    base = employee.hourly_rate;
+  } else if (_businessProfile?.award_type === 'custom' && _businessProfile?.custom_award?.base_rate) {
+    base = _businessProfile.custom_award.base_rate;
+  } else {
+    base = AWARD_BASE_RATE;
+  }
   const juniorMultiplier = getJuniorMultiplier(employee.age);
   return +(base * juniorMultiplier).toFixed(4);
 }
 
+// ── Returns penalty key, respecting custom award thresholds
 function getPenaltyKey(dateStr, startTime, endTime, employmentType) {
+  if (_businessProfile?.award_type === 'custom') {
+    // Delegate to custom-awards.js
+    return getCustomPenaltyKey(dateStr, startTime, endTime);
+  }
+
   const dayType = getDayType(dateStr);
   if (dayType === 'publicHoliday') return 'publicHoliday';
   if (dayType === 'sunday')        return 'sunday';
   if (dayType === 'saturday')      return 'saturday';
 
-  // Check early morning / late night
   const startH = parseInt(startTime?.split(':')[0] || '9');
   const endH   = parseInt(endTime?.split(':')[0]   || '17');
   if (startH < 7)  return 'earlyMorning';
@@ -128,10 +141,36 @@ function getPenaltyKey(dateStr, startTime, endTime, employmentType) {
   return 'ordinary';
 }
 
-function calcShiftPay(shift, employee) {
-  const empType   = employee.employment_type || 'casual'; // 'permanent', 'parttime', 'casual'
+// ── Returns penalty multiplier, respecting custom award if active
+function getPenaltyMultiplier(penaltyKey, empType) {
+  if (_businessProfile?.award_type === 'custom') {
+    return getCustomMultiplier(penaltyKey, empType);
+  }
   const penalties = empType === 'casual' ? PENALTIES.casual : PENALTIES.permanent;
-  const baseRate  = getBaseRate(employee);
+  return penalties[penaltyKey] || penalties.ordinary;
+}
+
+// ── Returns minimum engagement hours for active award
+function getMinEngagementHours() {
+  if (_businessProfile?.award_type === 'custom') {
+    return getCustomMinEngagement();
+  }
+  return MIN_ENGAGEMENT_HOURS;
+}
+
+// ── Returns break minutes for active award
+function calcBreakMins(shiftHours) {
+  if (_businessProfile?.award_type === 'custom') {
+    return getCustomBreakMins(shiftHours);
+  }
+  // MA000003: >5 hrs → 30 min unpaid meal break
+  if (shiftHours > 5) return 30;
+  return 0;
+}
+
+function calcShiftPay(shift, employee) {
+  const empType    = employee.employment_type || 'casual';
+  const baseRate   = getBaseRate(employee);
 
   // Parse times
   const startParts = shift.start_time.split(':').map(Number);
@@ -141,16 +180,17 @@ function calcShiftPay(shift, employee) {
   if (endMins <= startMins) endMins += 24 * 60; // overnight shift
 
   const totalMins   = endMins - startMins;
-  const breakMins   = shift.break_mins || calcBreakMins(totalMins / 60);
+  const breakMins   = shift.break_mins ?? calcBreakMins(totalMins / 60);
   const workedMins  = totalMins - breakMins;
   const workedHours = +(workedMins / 60).toFixed(4);
 
   // Enforce minimum engagement
-  const billableHours = Math.max(workedHours, MIN_ENGAGEMENT_HOURS);
+  const minEng       = getMinEngagementHours();
+  const billableHours = Math.max(workedHours, minEng);
 
   // Get penalty multiplier
   const penaltyKey  = getPenaltyKey(shift.date, shift.start_time, shift.end_time, empType);
-  const multiplier  = penalties[penaltyKey] || penalties.ordinary;
+  const multiplier  = getPenaltyMultiplier(penaltyKey, empType);
   const hourlyRate  = +(baseRate * multiplier).toFixed(4);
   const grossPay    = +(hourlyRate * billableHours).toFixed(2);
 
@@ -158,25 +198,18 @@ function calcShiftPay(shift, employee) {
   const laundryAllowance = employee.laundry_allowance ? LAUNDRY_ALLOWANCE.daily : 0;
 
   return {
-    workedHours:       +workedHours.toFixed(2),
-    billableHours:     +billableHours.toFixed(2),
+    workedHours:         +workedHours.toFixed(2),
+    billableHours:       +billableHours.toFixed(2),
     breakMins,
     penaltyKey,
     multiplier,
-    baseRate:          +baseRate.toFixed(4),
-    hourlyRate:        +hourlyRate.toFixed(4),
-    grossPay:          +grossPay.toFixed(2),
-    laundryAllowance:  +laundryAllowance.toFixed(2),
-    totalPay:          +(grossPay + laundryAllowance).toFixed(2),
-    isMinimumEngagement: workedHours < MIN_ENGAGEMENT_HOURS,
+    baseRate:            +baseRate.toFixed(4),
+    hourlyRate:          +hourlyRate.toFixed(4),
+    grossPay:            +grossPay.toFixed(2),
+    laundryAllowance:    +laundryAllowance.toFixed(2),
+    totalPay:            +(grossPay + laundryAllowance).toFixed(2),
+    isMinimumEngagement: workedHours < minEng,
   };
-}
-
-function calcBreakMins(shiftHours) {
-  // More than 5 hours → 30 min unpaid meal break
-  // 4+ hours → 10 min paid rest break (doesn't reduce worked hours as it's paid)
-  if (shiftHours > 5) return 30;  // only unpaid meal break deducted
-  return 0; // paid rest break doesn't affect pay calculation
 }
 
 function calcWeeklyPay(shifts, employee) {
@@ -212,7 +245,16 @@ function penaltyLabel(key) {
   return labels[key] || key;
 }
 
-// ── Format time for display
+// ── Week helpers
+function getWeekStart(dateStr) {
+  const d   = parseLocalDate(dateStr);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const mon = new Date(d);
+  mon.setDate(d.getDate() + diff);
+  return localDateStr(mon);
+}
+
 function fmtTime(timeStr) {
   if (!timeStr) return '—';
   const [h, m] = timeStr.split(':').map(Number);
@@ -221,25 +263,22 @@ function fmtTime(timeStr) {
   return `${hour}:${String(m).padStart(2,'0')}${period}`;
 }
 
-// ── Parse a YYYY-MM-DD string as LOCAL date (not UTC)
 function parseLocalDate(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, m - 1, d);
 }
 
-// ── Local date string (avoids UTC timezone shift on toISOString)
 function localDateStr(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const y   = d.getFullYear();
+  const m   = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
 
-// ── Get week dates (Mon–Sun) for a given date
 function getWeekDates(dateStr) {
   const d   = parseLocalDate(dateStr);
   const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day; // Monday start
+  const diff = day === 0 ? -6 : 1 - day;
   const mon = new Date(d);
   mon.setDate(d.getDate() + diff);
   return Array.from({ length: 7 }, (_, i) => {
