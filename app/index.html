@@ -69,15 +69,24 @@
     </div>
     <div class="header-actions">
       <div style="position:relative;" id="user-menu-wrap">
-        <button class="btn btn-ghost" onclick="toggleUserMenu()" style="font-size:12px;color:#fff;border-color:rgba(255,255,255,.2);">
-          👤 <span id="header-user">Account</span>
+        <button class="btn btn-ghost" onclick="toggleUserMenu()" style="font-size:12px;color:#fff;border-color:rgba(255,255,255,.2);gap:8px;">
+          <span class="user-avatar-sm" id="header-avatar">?</span>
+          <span id="header-user">Account</span>
+          <span style="opacity:.5;font-size:10px;">▾</span>
         </button>
-        <div id="user-dropdown" style="
-          display:none;position:absolute;top:calc(100% + 8px);right:0;
-          background:var(--surface);border:1px solid var(--border);border-radius:10px;
-          box-shadow:0 8px 24px rgba(26,26,46,.15);min-width:180px;z-index:9999;overflow:hidden;">
-          <div id="user-email-disp" style="padding:12px 16px;font-size:12px;color:var(--text3);border-bottom:1px solid var(--border);"></div>
-          <div onclick="signOut()" style="padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;color:var(--danger);" onmouseover="this.style.background='#fde2e2'" onmouseout="this.style.background=''">→ Sign Out</div>
+        <div id="user-dropdown" style="display:none;position:absolute;top:calc(100% + 8px);right:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 32px rgba(26,26,46,.2);min-width:220px;z-index:9999;overflow:hidden;">
+          <!-- User info -->
+          <div style="padding:14px 16px;border-bottom:1px solid var(--border);background:var(--surface2);">
+            <div style="font-weight:700;font-size:13px;" id="dd-user-name">—</div>
+            <div style="font-size:11px;color:var(--text3);" id="dd-user-email">—</div>
+            <div style="margin-top:6px;" id="dd-role-badge"></div>
+          </div>
+          <!-- Menu items -->
+          <div class="dd-item" onclick="openAccountSettings('profile')">👤 My Profile</div>
+          <div class="dd-item" id="dd-team-item" onclick="openAccountSettings('team')">👥 Team & Roles</div>
+          <div class="dd-item" id="dd-business-item" onclick="openAccountSettings('business')">🏢 Business Settings</div>
+          <div style="border-top:1px solid var(--border);"></div>
+          <div class="dd-item" style="color:var(--danger);" onclick="signOut()">→ Sign Out</div>
         </div>
       </div>
     </div>
@@ -498,6 +507,106 @@
       <button class="btn btn-ghost btn-sm" onclick="closeModal('payslip-modal')">Close</button>
       <button class="btn btn-ghost btn-sm" id="payslip-push-btn" onclick="pushPayslipToTayla()">📲 Send to Tayla</button>
       <button class="btn btn-primary btn-sm" onclick="downloadPayslipPDF()">⬇ Download PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- Account Settings Modal -->
+<div class="modal-overlay" id="account-modal">
+  <div class="modal" style="max-width:600px;width:95vw;max-height:90vh;display:flex;flex-direction:column;padding:0;overflow:hidden;">
+
+    <!-- Modal header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <h3 style="margin:0;">Account Settings</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('account-modal')">✕</button>
+    </div>
+
+    <!-- Sub-tabs -->
+    <div style="display:flex;border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;">
+      <button class="acct-tab active" id="acct-tab-profile"  onclick="switchAcctTab('profile')">👤 Profile</button>
+      <button class="acct-tab" id="acct-tab-team"     onclick="switchAcctTab('team')" style="display:none;">👥 Team</button>
+      <button class="acct-tab" id="acct-tab-business" onclick="switchAcctTab('business')" style="display:none;">🏢 Business</button>
+    </div>
+
+    <!-- Content -->
+    <div style="flex:1;overflow-y:auto;padding:24px;">
+
+      <!-- Profile tab -->
+      <div id="acct-panel-profile">
+        <div class="form-row">
+          <label class="form-label">Email</label>
+          <input type="text" id="acct-email" class="form-input" readonly style="background:var(--surface2);color:var(--text3);">
+        </div>
+        <div class="form-row">
+          <label class="form-label">Display Name</label>
+          <input type="text" id="acct-name" class="form-input" placeholder="Your name">
+        </div>
+        <div class="form-row">
+          <label class="form-label">Role</label>
+          <input type="text" id="acct-role-display" class="form-input" readonly style="background:var(--surface2);color:var(--text3);">
+        </div>
+        <div style="margin-top:8px;border-top:1px solid var(--border);padding-top:20px;">
+          <label class="form-label">Change Password</label>
+          <input type="password" id="acct-new-pw" class="form-input" placeholder="New password (min 6 chars)" style="margin-bottom:8px;">
+          <input type="password" id="acct-confirm-pw" class="form-input" placeholder="Confirm new password">
+        </div>
+        <div id="acct-profile-msg" style="margin-top:10px;font-size:12px;min-height:18px;"></div>
+        <button class="btn btn-primary" style="margin-top:16px;" onclick="saveProfile()">Save Changes</button>
+      </div>
+
+      <!-- Team tab -->
+      <div id="acct-panel-team" style="display:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div style="font-weight:700;font-size:14px;">Team Members</div>
+          <button class="btn btn-primary btn-sm" onclick="openInviteTeamMember()">+ Invite Member</button>
+        </div>
+        <div id="team-list"></div>
+
+        <!-- Invite form (hidden by default) -->
+        <div id="invite-team-form" style="display:none;margin-top:20px;padding:16px;background:var(--surface2);border-radius:10px;border:1px solid var(--border);">
+          <div style="font-weight:700;font-size:13px;margin-bottom:14px;">Invite Team Member</div>
+          <div class="form-row">
+            <label class="form-label">Email Address</label>
+            <input type="email" id="invite-email" class="form-input" placeholder="name@example.com">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Role</label>
+            <select id="invite-role" class="form-input">
+              <option value="franchise">Franchise — Full access</option>
+              <option value="manager">Manager — Roster, timesheets, employees, projections, awards</option>
+              <option value="payroll_officer">Payroll Officer — Employees, roster view, awards, push payroll</option>
+            </select>
+          </div>
+          <div id="invite-link-result" style="display:none;margin-top:12px;"></div>
+          <div style="display:flex;gap:8px;margin-top:14px;">
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('invite-team-form').style.display='none'">Cancel</button>
+            <button class="btn btn-primary btn-sm" onclick="generateTeamInvite()">Generate Invite Link</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Business tab -->
+      <div id="acct-panel-business" style="display:none;">
+        <div class="form-row">
+          <label class="form-label">Business Name</label>
+          <input type="text" id="biz-name-input" class="form-input">
+        </div>
+        <div class="form-row">
+          <label class="form-label">ABN</label>
+          <input type="text" id="biz-abn-input" class="form-input" placeholder="XX XXX XXX XXX">
+        </div>
+        <div class="form-row">
+          <label class="form-label">Address</label>
+          <input type="text" id="biz-address-input" class="form-input" placeholder="123 Main St, Melbourne VIC 3000">
+        </div>
+        <div class="form-row">
+          <label class="form-label">Phone</label>
+          <input type="text" id="biz-phone-input" class="form-input" placeholder="03 XXXX XXXX">
+        </div>
+        <div id="acct-biz-msg" style="margin-top:10px;font-size:12px;min-height:18px;"></div>
+        <button class="btn btn-primary" style="margin-top:16px;" onclick="saveBusinessSettings()">Save Changes</button>
+      </div>
+
     </div>
   </div>
 </div>
