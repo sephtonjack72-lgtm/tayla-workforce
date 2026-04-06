@@ -1325,7 +1325,7 @@ async function loadFranchiseAnalyticsData() {
     });
 
     const revenue = salesRows.reduce((s, r) => {
-      const val = r.actual != null ? Number(r.actual) : (r.projected != null ? Number(r.projected) : 0);
+      const val = r.actual != null ? Number(r.actual) : 0;
       return s + (isNaN(val) ? 0 : val);
     }, 0);
 
@@ -1373,6 +1373,8 @@ function renderOverviewAnalytics(el, data) {
   const totalRevenue = data.reduce((s, d) => s + d.revenue, 0);
   const avgSpch      = data.filter(d => d.spch > 0).reduce((s, d) => s + d.spch, 0) / (data.filter(d => d.spch > 0).length || 1);
 
+  const maxVal = Math.max(...data.map(d => Math.max(d.labourCost, d.revenue)), 1);
+
   el.innerHTML = `
     <div class="analytics-overview-grid">
       <div class="kpi"><div class="kpi-label">Total Labour</div><div class="kpi-value negative">${fmt(totalLabour)}</div></div>
@@ -1382,17 +1384,29 @@ function renderOverviewAnalytics(el, data) {
     </div>
     <div class="analytics-bars">
       ${data.map((d, i) => {
-        const maxVal = Math.max(...data.map(x => x.labourCost), 1);
-        const pct    = Math.max((d.labourCost / maxVal) * 100, 2);
+        const labourPct  = Math.max((d.labourCost / maxVal) * 100, 2);
+        const revenuePct = Math.max((d.revenue / maxVal) * 100, d.revenue > 0 ? 2 : 0);
+        const colour     = FRANCHISE_COLOURS[i % FRANCHISE_COLOURS.length];
         return `
-          <div class="analytics-bar-wrap" title="${d.name}: ${fmt(d.labourCost)} labour">
-            <div class="analytics-bar-value">${fmt(d.labourCost)}</div>
-            <div class="analytics-bar" style="height:${pct}%;background:${FRANCHISE_COLOURS[i % FRANCHISE_COLOURS.length]};"></div>
+          <div class="analytics-bar-wrap">
+            <div style="display:flex;gap:4px;align-items:flex-end;width:100%;justify-content:center;">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;">
+                <div class="analytics-bar-value" style="font-size:10px;">${fmt(d.labourCost)}</div>
+                <div class="analytics-bar" style="height:${labourPct}%;background:${colour};opacity:.7;"></div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;">
+                <div class="analytics-bar-value" style="font-size:10px;color:var(--success);">${fmt(d.revenue)}</div>
+                <div class="analytics-bar" style="height:${revenuePct}%;background:#38a169;"></div>
+              </div>
+            </div>
             <div class="analytics-bar-label">${d.name}</div>
           </div>`;
       }).join('')}
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center;">Labour cost by location</div>
+    <div style="display:flex;gap:16px;justify-content:center;margin-top:10px;font-size:11px;color:var(--text3);">
+      <span><span style="display:inline-block;width:10px;height:10px;background:${FRANCHISE_COLOURS[0]};opacity:.7;border-radius:2px;margin-right:4px;"></span>Labour</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#38a169;border-radius:2px;margin-right:4px;"></span>Revenue (actual)</span>
+    </div>
   `;
 }
 
