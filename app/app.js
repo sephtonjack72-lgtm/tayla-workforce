@@ -490,11 +490,13 @@ function renderDashboard() {
   const phRateEl = document.getElementById('dash-ph-rate');
   if (phEl) {
     // Get PH multiplier from custom award if active, otherwise MA000003 default (2.5)
-    const phMultiplier = (typeof _customAward !== 'undefined' && _customAward?.permanent?.publicHoliday)
+    // Get PH multiplier — respect active award type
+    const isCustomActive = _businessProfile?.award_type === 'custom';
+    const phMultiplier = (isCustomActive && typeof _customAward !== 'undefined' && _customAward?.permanent?.publicHoliday)
       ? _customAward.permanent.publicHoliday
       : 2.5;
     const phPct  = Math.round(phMultiplier * 100) + '%';
-    const awardName = (typeof _customAward !== 'undefined' && _customAward?.name)
+    const awardName = (isCustomActive && typeof _customAward !== 'undefined' && _customAward?.name)
       ? _customAward.name
       : 'MA000003';
     if (phRateEl) phRateEl.textContent = `${awardName} · ${phPct} rate`;
