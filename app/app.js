@@ -96,6 +96,10 @@ async function signOut() {
 // ══════════════════════════════════════════════════════
 
 async function afterLogin() {
+  // Check for team invite token first — before anything else
+  const params = new URLSearchParams(window.location.search);
+  const teamToken = params.get('team_invite');
+
   // First check if they own a business
   const { data: ownedBiz } = await _supabase
     .from('businesses').select('*')
@@ -111,7 +115,7 @@ async function afterLogin() {
     return;
   }
 
-  // Check if they're a team member on another business
+  // Check if they're already an active team member
   const { data: membership } = await _supabase
     .from('business_users')
     .select('*, businesses(*)')
@@ -128,7 +132,13 @@ async function afterLogin() {
     return;
   }
 
-  // New user — show business setup
+  // If there's a team invite token, accept it now before showing setup
+  if (teamToken) {
+    const accepted = await acceptTeamInviteToken(teamToken);
+    if (accepted) return; // acceptTeamInviteToken will reload the page
+  }
+
+  // New user with no business and no invite — show business setup
   showBusinessSetup();
 }
 
@@ -629,12 +639,8 @@ async function revokeTeamMember(id, email) {
   loadTeamList();
 }
 
-// Handle team invite token on page load
-async function handleTeamInviteToken() {
-  const params = new URLSearchParams(window.location.search);
-  const token  = params.get('team_invite');
-  if (!token || !_currentUser) return;
-
+// Core invite acceptance — called both from afterLogin and handleTeamInviteToken
+async function acceptTeamInviteToken(token) {
   const { data: invite } = await _supabase
     .from('business_users')
     .select('*')
@@ -642,10 +648,10 @@ async function handleTeamInviteToken() {
     .eq('status', 'pending')
     .maybeSingle();
 
-  if (!invite) { toast('Invalid or expired invite link'); return; }
-  if (new Date(invite.invite_expires) < new Date()) { toast('This invite has expired'); return; }
+  if (!invite) { toast('Invalid or expired invite link'); return false; }
+  if (new Date(invite.invite_expires) < new Date()) { toast('This invite has expired'); return false; }
 
-  // Accept the invite
+  // Accept the invite — link to current user
   const { error } = await _supabase.from('business_users').update({
     user_id:      _currentUser.id,
     status:       'active',
@@ -653,12 +659,19 @@ async function handleTeamInviteToken() {
     invite_token: null,
   }).eq('id', invite.id);
 
-  if (error) { toast('Error accepting invite: ' + error.message); return; }
+  if (error) { toast('Error accepting invite: ' + error.message); return false; }
 
-  // Clear the token from URL
+  // Clear token from URL and reload so afterLogin picks up the new membership
   window.history.replaceState({}, '', window.location.pathname);
-  toast('Welcome to the team! ✓');
+  toast('Welcome to the team! Launching now… ✓');
+  setTimeout(() => window.location.reload(), 1200);
+  return true;
+}
 
-  // Reload to apply the new role
-  setTimeout(() => window.location.reload(), 1500);
+// Handle team invite token on page load (for already-logged-in users)
+async function handleTeamInviteToken() {
+  const params = new URLSearchParams(window.location.search);
+  const token  = params.get('team_invite');
+  if (!token || !_currentUser) return;
+  await acceptTeamInviteToken(token);
 }
