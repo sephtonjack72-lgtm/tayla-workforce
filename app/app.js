@@ -664,26 +664,48 @@ async function switchFranchise(businessId) {
     profile = data;
   } else {
     profile = _franchises.find(f => f.id === businessId);
+    if (!profile) {
+      const { data } = await _supabase.from('businesses').select('*').eq('id', businessId).maybeSingle();
+      profile = data;
+    }
   }
   if (!profile) return;
 
   _businessProfile = profile;
   _businessId      = businessId;
 
-  // Reset loaded ranges so data reloads for new franchise
+  // Clear all cached data so nothing from the old franchise bleeds through
+  if (typeof shifts !== 'undefined')     { shifts.length = 0; }
+  if (typeof employees !== 'undefined')  { employees.length = 0; }
+  if (typeof timesheets !== 'undefined') { timesheets.length = 0; }
+  if (typeof salesData !== 'undefined')  { Object.keys(salesData).forEach(k => delete salesData[k]); }
+  if (typeof availabilityData !== 'undefined') { Object.keys(availabilityData).forEach(k => delete availabilityData[k]); }
+
+  // Reset loaded ranges
   if (typeof _shiftsLoadedRange !== 'undefined')     _shiftsLoadedRange     = null;
   if (typeof _timesheetsLoadedRange !== 'undefined') _timesheetsLoadedRange = null;
+  if (typeof _availabilityLoaded !== 'undefined')    _availabilityLoaded    = false;
 
   // Update header
   const nameEl = document.getElementById('header-biz-name');
   if (nameEl) nameEl.textContent = profile.biz_name || 'My Business';
 
-  // Reload all data for this franchise
   toast(`Switched to ${profile.biz_name} ✓`);
+
+  // Reload all data fresh for this franchise
+  const today     = localDateStr(new Date());
+  const weekStart = getWeekStart(today);
+  const weekEnd   = getWeekDates(weekStart)[6];
+
   await Promise.all([
     dbLoadEmployees(),
+    typeof _dbLoadShiftsRaw === 'function' ? _dbLoadShiftsRaw(weekStart, weekEnd) : Promise.resolve(),
+    typeof _dbLoadTimesheetsRaw === 'function' ? _dbLoadTimesheetsRaw(weekStart, weekEnd) : Promise.resolve(),
     typeof dbLoadAvailability === 'function' ? dbLoadAvailability() : Promise.resolve(),
   ]);
+
+  if (typeof _shiftsLoadedRange !== 'undefined')     _shiftsLoadedRange     = `${weekStart}:${weekEnd}`;
+  if (typeof _timesheetsLoadedRange !== 'undefined') _timesheetsLoadedRange = `${weekStart}:${weekEnd}`;
 
   _appReady = true;
   renderDashboard();
