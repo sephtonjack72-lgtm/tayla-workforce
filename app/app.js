@@ -128,6 +128,8 @@ function applyProfile(profile) {
     renderRoster();
     renderSales();
     renderTimesheets();
+    // Init awards page (deferred — only renders when tab is active)
+    if (typeof initAwardPage === 'function') initAwardPage();
   });
 }
 
@@ -139,14 +141,16 @@ function showBusinessSetup() {
 }
 
 async function saveBusinessSetup() {
-  const name = document.getElementById('setup-biz-name').value.trim();
-  const abn  = document.getElementById('setup-abn').value.trim();
+  const name      = document.getElementById('setup-biz-name').value.trim();
+  const abn       = document.getElementById('setup-abn').value.trim();
+  const awardType = document.getElementById('setup-award').value;
   if (!name) { toast('Business name is required'); return; }
 
   const { data, error } = await _supabase.from('businesses').insert({
-    user_id:   _currentUser.id,
-    biz_name:  name,
+    user_id:    _currentUser.id,
+    biz_name:   name,
     abn,
+    award_type: awardType,
     created_at: new Date().toISOString(),
   }).select().single();
 
@@ -169,11 +173,12 @@ function showPage(id) {
   document.getElementById(id)?.classList.add('active');
   document.querySelector(`[data-page="${id}"]`)?.classList.add('active');
 
-  if (id === 'dashboard')   renderDashboard();
-  if (id === 'employees')   renderEmployees();
-  if (id === 'roster')      renderRoster();
-  if (id === 'sales')       renderSales();
-  if (id === 'timesheets')  renderTimesheets();
+  if (id === 'dashboard')  renderDashboard();
+  if (id === 'employees')  renderEmployees();
+  if (id === 'roster')     renderRoster();
+  if (id === 'sales')      renderSales();
+  if (id === 'timesheets') renderTimesheets();
+  if (id === 'awards')     initAwardPage();
 }
 
 // ══════════════════════════════════════════════════════
@@ -254,14 +259,12 @@ function renderDashboard() {
 // Jump to Sales Projections tab and open the correct day
 function goToSalesProjection(date) {
   showPage('sales');
-  // Set the sales week to match this date's week, then switch to the day
   if (typeof _salesWeekStart !== 'undefined') {
     const weekDates = getWeekDates(getWeekStart(date));
     if (!weekDates.includes(date)) return;
     _salesWeekStart = getWeekStart(date);
   }
   if (typeof renderSales === 'function') renderSales();
-  // Small delay so the tab renders before we try to click it
   setTimeout(() => {
     if (typeof switchSalesDay === 'function') switchSalesDay(date);
   }, 80);
