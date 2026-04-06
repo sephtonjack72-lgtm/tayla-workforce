@@ -1026,6 +1026,8 @@ document.addEventListener('visibilitychange', () => {
 
 async function getBillingStatus() {
   if (!_businessProfile) return null;
+  // Internal accounts are always active — never billed
+  if (_businessProfile.is_internal) return 'active';
   const status    = _businessProfile.subscription_status || 'trial';
   const trialEnd  = _businessProfile.trial_ends_at ? new Date(_businessProfile.trial_ends_at) : null;
   const periodEnd = _businessProfile.current_period_end ? new Date(_businessProfile.current_period_end) : null;
