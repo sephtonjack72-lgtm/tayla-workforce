@@ -1344,6 +1344,11 @@ async function renderFranchiseAnalytics() {
     analyticsSection.style.display = 'none';
     return;
   }
+  // Also hide when owner is viewing a specific franchise (not head office)
+  if (_businessId !== _ownerBusinessId) {
+    analyticsSection.style.display = 'none';
+    return;
+  }
   analyticsSection.style.display = 'block';
 
   el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text3);font-size:13px;">Loading analytics…</div>';
