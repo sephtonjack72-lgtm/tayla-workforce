@@ -1283,9 +1283,10 @@ function getPeriodRange(period) {
 async function loadFranchiseAnalyticsData() {
   const { start, end } = getPeriodRange(_analyticsPeriod);
 
-  // Owners see all franchises + head office, franchise users see only their business
+  // Owners see all franchises only from Head Office view
+  // When switched to a franchise, or franchise user — show only current business
   let allBizIds, bizMap;
-  if (_userRole === 'owner') {
+  if (_userRole === 'owner' && _businessId === _ownerBusinessId) {
     allBizIds = [_ownerBusinessId, ..._franchises.map(f => f.id)].filter(Boolean);
     bizMap = {
       [_ownerBusinessId]: 'Head Office',
