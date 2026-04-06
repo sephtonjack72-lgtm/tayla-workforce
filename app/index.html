@@ -131,6 +131,29 @@
   <div id="dashboard" class="page active">
     <div class="kpi-grid" id="dash-kpis"></div>
 
+    <!-- Franchise Analytics (owners with franchises only) -->
+    <div id="franchise-analytics" style="display:none;margin-bottom:24px;">
+      <div class="card">
+        <div class="card-header flex-between">
+          <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+            <button class="analytics-tab active" id="atab-overview" onclick="switchAnalyticsTab('overview')">Overview</button>
+            <button class="analytics-tab" id="atab-labour" onclick="switchAnalyticsTab('labour')">Labour Cost</button>
+            <button class="analytics-tab" id="atab-revenue" onclick="switchAnalyticsTab('revenue')">Revenue</button>
+            <button class="analytics-tab" id="atab-spch" onclick="switchAnalyticsTab('spch')">SPCH</button>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-ghost btn-sm analytics-period active" id="aperiod-week"    onclick="switchAnalyticsPeriod('week')">Week</button>
+            <button class="btn btn-ghost btn-sm analytics-period"        id="aperiod-month"   onclick="switchAnalyticsPeriod('month')">Month</button>
+            <button class="btn btn-ghost btn-sm analytics-period"        id="aperiod-quarter" onclick="switchAnalyticsPeriod('quarter')">Quarter</button>
+            <button class="btn btn-ghost btn-sm analytics-period"        id="aperiod-year"    onclick="switchAnalyticsPeriod('year')">Year</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="analytics-chart" style="min-height:220px;"></div>
+        </div>
+      </div>
+    </div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;" class="responsive-2col">
       <div class="card">
         <div class="card-header"><span class="card-title">Today's Shifts</span></div>
@@ -254,8 +277,8 @@
             <span id="ts-week-label">—</span>
             <button onclick="tsWeekNav(1)">›</button>
           </div>
-          <button class="btn btn-success btn-sm" onclick="approveAllPending()">✓ Approve All Pending</button>
-          <button class="btn btn-primary btn-sm" onclick="openPushPayslipsModal()" style="white-space:nowrap;">
+          <button class="btn btn-success btn-sm" id="ts-approve-all-btn" onclick="approveAllPending()">✓ Approve All Pending</button>
+          <button class="btn btn-primary btn-sm" id="ts-push-btn" onclick="openPushPayslipsModal()" style="white-space:nowrap;">
             📲 Push Payslips
           </button>
         </div>
