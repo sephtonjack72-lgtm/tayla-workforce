@@ -733,6 +733,10 @@ async function switchFranchise(businessId) {
   if (typeof salesData !== 'undefined')  { Object.keys(salesData).forEach(k => delete salesData[k]); }
   if (typeof availabilityData !== 'undefined') { Object.keys(availabilityData).forEach(k => delete availabilityData[k]); }
 
+  // Render immediately with empty data to clear stale UI
+  renderEmployees();
+  renderDashboard();
+
   // Reset loaded ranges
   if (typeof _shiftsLoadedRange !== 'undefined')     _shiftsLoadedRange     = null;
   if (typeof _timesheetsLoadedRange !== 'undefined') _timesheetsLoadedRange = null;
