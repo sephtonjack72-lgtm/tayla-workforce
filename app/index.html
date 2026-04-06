@@ -66,6 +66,7 @@
     <div style="display:flex;align-items:center;gap:12px;">
       <div class="logo">Tayla <span>Workforce</span></div>
       <span class="logo-sub" id="header-biz-name"></span>
+      <div id="franchise-switcher-wrap" style="display:none;align-items:center;"></div>
     </div>
     <div class="header-actions">
       <div style="position:relative;" id="user-menu-wrap">
@@ -556,15 +557,49 @@
 
       <!-- Team tab -->
       <div id="acct-panel-team" style="display:none;">
+
+        <!-- Franchises section (owners only) -->
+        <div id="franchises-section" style="display:none;margin-bottom:24px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <div style="font-weight:700;font-size:14px;">Franchises</div>
+            <button class="btn btn-primary btn-sm" onclick="document.getElementById('add-franchise-form').style.display='block'">+ Add Franchise</button>
+          </div>
+          <div id="franchise-list"></div>
+
+          <!-- Add franchise form -->
+          <div id="add-franchise-form" style="display:none;margin-top:16px;padding:16px;background:var(--surface2);border-radius:10px;border:1px solid var(--border);">
+            <div style="font-weight:700;font-size:13px;margin-bottom:14px;">New Franchise</div>
+            <div class="form-row">
+              <label class="form-label">Franchise Name *</label>
+              <input type="text" id="franchise-name" class="form-input" placeholder="e.g. Tayla Financial Melbourne CBD">
+            </div>
+            <div class="form-row">
+              <label class="form-label">ABN</label>
+              <input type="text" id="franchise-abn" class="form-input" placeholder="XX XXX XXX XXX">
+            </div>
+            <div class="form-row">
+              <label class="form-label">Address</label>
+              <input type="text" id="franchise-address" class="form-input" placeholder="123 Main St, Melbourne VIC 3000">
+            </div>
+            <div style="display:flex;gap:8px;margin-top:14px;">
+              <button class="btn btn-ghost btn-sm" onclick="document.getElementById('add-franchise-form').style.display='none'">Cancel</button>
+              <button class="btn btn-primary btn-sm" onclick="createFranchise()">Create Franchise</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Team members section -->
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
           <div style="font-weight:700;font-size:14px;">Team Members</div>
           <button class="btn btn-primary btn-sm" onclick="openInviteTeamMember()">+ Invite Member</button>
         </div>
         <div id="team-list"></div>
 
-        <!-- Invite form (hidden by default) -->
+        <!-- Invite form -->
         <div id="invite-team-form" style="display:none;margin-top:20px;padding:16px;background:var(--surface2);border-radius:10px;border:1px solid var(--border);">
           <div style="font-weight:700;font-size:13px;margin-bottom:14px;">Invite Team Member</div>
+          <div id="invite-franchise-label" style="font-size:12px;color:var(--accent2);font-weight:600;margin-bottom:10px;display:none;"></div>
+          <input type="hidden" id="invite-franchise-id" value="">
           <div class="form-row">
             <label class="form-label">Email Address</label>
             <input type="email" id="invite-email" class="form-input" placeholder="name@example.com">
@@ -579,7 +614,7 @@
           </div>
           <div id="invite-link-result" style="display:none;margin-top:12px;"></div>
           <div style="display:flex;gap:8px;margin-top:14px;">
-            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('invite-team-form').style.display='none'">Cancel</button>
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('invite-team-form').style.display='none';document.getElementById('invite-franchise-id').value='';">Cancel</button>
             <button class="btn btn-primary btn-sm" onclick="generateTeamInvite()">Generate Invite Link</button>
           </div>
         </div>
