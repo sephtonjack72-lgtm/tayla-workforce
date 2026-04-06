@@ -620,18 +620,9 @@ function openAssignPopover(shiftId, barEl) {
   const activeEmps = employees.filter(e => e.active !== false);
   if (!activeEmps.length) { toast('Add employees first'); return; }
 
-  // Filter out employees who are unavailable on this shift's day
+  // Check availability for warning purposes
   const d = parseLocalDate(shift.date);
   const dow = d.getDay();
-  const availableEmps = activeEmps.filter(emp => {
-    const empAvail = availabilityData[emp.id];
-    if (!empAvail) return true; // no availability set — assume available
-    const avail = empAvail[dow];
-    if (!avail) return true; // no data for this day — assume available
-    return avail.available !== false; // exclude fully unavailable
-  });
-
-  if (!availableEmps.length) { toast('No available employees for this day'); return; }
 
   const popover = document.createElement('div');
   popover.className = 'assign-popover';
@@ -646,17 +637,20 @@ function openAssignPopover(shiftId, barEl) {
       <button class="assign-popover-close" onclick="closeAssignPopover()">✕</button>
     </div>
     <div class="assign-emp-list">
-      ${availableEmps.map(emp => {
-        const initials  = ((emp.first_name?.[0]||'')+(emp.last_name?.[0]||'')).toUpperCase();
+      ${activeEmps.map(emp => {
+        const initials   = ((emp.first_name?.[0]||'')+(emp.last_name?.[0]||'')).toUpperCase();
         const isAssigned = shift.employee_id === emp.id;
-        // Preview pay for this employee
-        const pay = calcShiftPay({ ...shift, employee_id: emp.id }, emp);
+        const pay        = calcShiftPay({ ...shift, employee_id: emp.id }, emp);
+        const empAvail   = availabilityData[emp.id];
+        const avail      = empAvail?.[dow];
+        const unavailable = avail && avail.available === false;
+        const restricted  = avail && avail.available === true && avail.start_time && avail.end_time;
         return `
           <div class="assign-emp-row ${isAssigned?'assigned':''}" onclick="assignShift('${shiftId}','${emp.id}')">
-            <div class="avatar" style="width:28px;height:28px;font-size:10px;flex-shrink:0;${isAssigned?'background:var(--success);':''}">${initials}</div>
+            <div class="avatar" style="width:28px;height:28px;font-size:10px;flex-shrink:0;${isAssigned?'background:var(--success);':unavailable?'opacity:.5;':''}">${initials}</div>
             <div style="flex:1;min-width:0;">
-              <div style="font-weight:600;font-size:12px;">${emp.first_name} ${emp.last_name}</div>
-              <div style="font-size:10px;color:var(--text3);">${emp.employment_type||'casual'}</div>
+              <div style="font-weight:600;font-size:12px;${unavailable?'color:var(--text2);font-style:italic;':''}">${emp.first_name} ${emp.last_name}</div>
+              <div style="font-size:10px;color:var(--text3);">${emp.employment_type||'casual'}${unavailable?' · <span style="color:var(--danger);font-weight:600;">Unavailable</span>':restricted?` · <span style="color:var(--warning);font-weight:600;">${fmtTime(avail.start_time)}–${fmtTime(avail.end_time)}</span>`:''}</div>
             </div>
             <div style="text-align:right;font-size:11px;">
               <div class="mono" style="font-weight:700;color:var(--success);">${fmt(pay.totalPay)}</div>
