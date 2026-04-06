@@ -342,9 +342,15 @@ function buildGanttDay(date, dayShifts, activeEmps) {
   })();
 
   const unassignedShifts = dayShifts.filter(s => !s.employee_id);
+  // Only show employees who have shifts on this day — no empty rows
   const withShifts = activeEmps.filter(e => dayShifts.some(s => s.employee_id === e.id));
-  const without    = activeEmps.filter(e => !dayShifts.some(s => s.employee_id === e.id));
-  const ordered    = [...withShifts, ...without];
+  // Sort employees by their earliest shift start time
+  withShifts.sort((a, b) => {
+    const aStart = dayShifts.filter(s => s.employee_id === a.id).map(s => s.start_time).sort()[0] || '99';
+    const bStart = dayShifts.filter(s => s.employee_id === b.id).map(s => s.start_time).sort()[0] || '99';
+    return aStart.localeCompare(bStart);
+  });
+  const ordered = withShifts;
 
   const gridLines = hourMarks.slice(1).map(({pct}) =>
     `<div class="gantt-gridline" style="left:calc(var(--gcol) + (100% - var(--gcol)) * ${pct/100});"></div>`
@@ -434,6 +440,10 @@ function buildUnassignedBar(shift) {
 // ── Employee rows — one row per shift, first row shows name ──────────────────
 function buildGanttRow(emp, date, empShifts) {
   const initials = ((emp.first_name?.[0]||'')+(emp.last_name?.[0]||'')).toUpperCase();
+
+  // Sort shifts by start time earliest first
+  empShifts = [...empShifts].sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
+
   let totalHours = 0, totalCost = 0;
   empShifts.forEach(s => { const p = cachedShiftPay(s,emp); totalHours += p.workedHours; totalCost += p.totalPay; });
 
@@ -568,6 +578,19 @@ function openAssignPopover(shiftId, barEl) {
   const activeEmps = employees.filter(e => e.active !== false);
   if (!activeEmps.length) { toast('Add employees first'); return; }
 
+  // Filter out employees who are unavailable on this shift's day
+  const d = parseLocalDate(shift.date);
+  const dow = d.getDay();
+  const availableEmps = activeEmps.filter(emp => {
+    const empAvail = availabilityData[emp.id];
+    if (!empAvail) return true; // no availability set — assume available
+    const avail = empAvail[dow];
+    if (!avail) return true; // no data for this day — assume available
+    return avail.available !== false; // exclude fully unavailable
+  });
+
+  if (!availableEmps.length) { toast('No available employees for this day'); return; }
+
   const popover = document.createElement('div');
   popover.className = 'assign-popover';
   popover.id = 'assign-popover';
@@ -581,7 +604,7 @@ function openAssignPopover(shiftId, barEl) {
       <button class="assign-popover-close" onclick="closeAssignPopover()">✕</button>
     </div>
     <div class="assign-emp-list">
-      ${activeEmps.map(emp => {
+      ${availableEmps.map(emp => {
         const initials  = ((emp.first_name?.[0]||'')+(emp.last_name?.[0]||'')).toUpperCase();
         const isAssigned = shift.employee_id === emp.id;
         // Preview pay for this employee
