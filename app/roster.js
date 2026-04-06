@@ -32,6 +32,11 @@ const DAY_LONG  = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'
 // Availability keyed by employee_id → array of { day_of_week, available, start_time, end_time }
 let availabilityData = {};
 
+async function ensureAvailabilityLoaded() {
+  if (_availabilityLoaded) return;
+  await dbLoadAvailability();
+}
+
 async function dbLoadAvailability() {
   if (!_businessId) return;
   const { data, error } = await _supabase
@@ -47,15 +52,7 @@ async function dbLoadAvailability() {
 }
 
 async function dbLoadShifts(weekStart, weekEnd) {
-  if (!_businessId) return;
-  const { data, error } = await _supabase
-    .from('shifts').select('*')
-    .eq('business_id', _businessId)
-    .gte('date', weekStart).lte('date', weekEnd);
-  if (error) { console.error('Load shifts failed:', error); return; }
-  const other = shifts.filter(s => s.date < weekStart || s.date > weekEnd);
-  shifts = [...other, ...(data || [])];
-  localStorage.setItem('wf_shifts', JSON.stringify(shifts));
+  await ensureShiftsLoaded(weekStart, weekEnd);
 }
 
 async function dbSaveShift(shift) {
@@ -115,6 +112,25 @@ function switchDay(date) {
 //  MAIN RENDER
 // ══════════════════════════════════════════════════════
 
+// Instant render from memory — called on tab switch
+function renderRosterFromMemory() {
+  clearPayCache();
+  const weekDates = getWeekDates(_currentWeekStart);
+  if (!weekDates.includes(_activeDay)) _activeDay = weekDates[0];
+  const weekEnd = weekDates[6];
+
+  const label = document.getElementById('roster-week-label');
+  if (label) {
+    const s = parseLocalDate(_currentWeekStart), e = parseLocalDate(weekEnd);
+    label.textContent = `${s.toLocaleDateString('en-AU',{day:'numeric',month:'short'})} — ${e.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}`;
+  }
+
+  renderRosterKPIs(weekDates);
+  renderDayTabs(weekDates);
+  renderGanttPanel(_activeDay);
+}
+
+// Full render — fetches from Supabase if week not yet loaded, then renders
 function renderRoster() {
   clearPayCache();
   const weekDates = getWeekDates(_currentWeekStart);
@@ -128,9 +144,10 @@ function renderRoster() {
   }
 
   Promise.all([
-    dbLoadShifts(_currentWeekStart, weekEnd),
-    dbLoadAvailability(),
+    ensureShiftsLoaded(_currentWeekStart, weekEnd),
+    ensureAvailabilityLoaded(),
   ]).then(() => {
+    markShiftsLoaded(_currentWeekStart, weekEnd);
     renderRosterKPIs(weekDates);
     renderDayTabs(weekDates);
     renderGanttPanel(_activeDay);
