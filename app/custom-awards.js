@@ -96,10 +96,6 @@ function renderAwardPage() {
         <span style="display:flex;align-items:center;font-size:12px;color:var(--success);gap:4px;">
           ✓ MA000003 active
         </span>` : ''}
-      ${isMa && _businessProfile?.award_type === 'custom' ? `
-        <button id="ma-save-btn" class="btn btn-primary" onclick="saveMa000003Award()" style="font-size:13px;">
-          ✓ Save & Activate MA000003
-        </button>` : ''}
     </div>
 
     ${isMa ? renderMA000003View() : renderCustomAwardEditor()}
@@ -122,9 +118,14 @@ function renderMA000003View() {
 
   return `
     <div class="card" style="margin-bottom:20px;">
-      <div class="card-header">
+      <div class="card-header flex-between">
         <span class="card-title">Fast Food Industry Award — MA000003</span>
-        <span style="font-size:11px;color:var(--text3);">FY2024-25 · Level 1 Adult · Read-only</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:11px;color:var(--text3);">FY2024-25 · Level 1 Adult · Read-only</span>
+          ${_businessProfile?.award_type === 'custom' ? `
+            <button id="ma-save-btn" class="btn btn-accent btn-sm" onclick="saveMa000003Award()">💾 Save & Activate</button>
+          ` : `<span style="font-size:11px;color:var(--success);font-weight:600;">✓ Active</span>`}
+        </div>
       </div>
       <div class="card-body">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px;">
