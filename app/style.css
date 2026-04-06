@@ -72,6 +72,50 @@ header {
 }
 .header-actions { display: flex; align-items: center; gap: 12px; }
 
+/* Header account button */
+#user-menu-wrap button {
+  background: rgba(255,255,255,.12);
+  border: 1.5px solid rgba(255,255,255,.25);
+  color: #fff;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+  font-family: inherit;
+}
+#user-menu-wrap button:hover {
+  background: rgba(255,255,255,.22);
+  border-color: rgba(255,255,255,.4);
+}
+.user-avatar-sm {
+  background: var(--accent2);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* Franchise switcher */
+#franchise-switcher-wrap select,
+#franchise-select {
+  background: rgba(255,255,255,.12) !important;
+  color: #fff !important;
+  border: 1.5px solid rgba(255,255,255,.25) !important;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+#franchise-select option {
+  background: #1a1a2e;
+  color: #fff;
+}
+
 /* ── Nav ── */
 nav {
   background: var(--surface);
