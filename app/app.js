@@ -12,6 +12,8 @@ let _currentUser     = null;
 let _businessProfile = null;
 let _businessId      = null;
 let _userRole        = null; // 'owner' | 'franchise' | 'manager' | 'payroll_officer'
+let _ownerBusinessId = null; // owner's root business
+let _franchises      = [];   // child franchise businesses
 
 // ── Loaded range tracking — prevents redundant Supabase fetches
 let _shiftsLoadedRange     = null; // e.g. '2026-03-30:2026-04-05'
@@ -109,7 +111,17 @@ async function afterLogin() {
   if (ownedBiz) {
     _businessProfile = ownedBiz;
     _businessId      = ownedBiz.id;
+    _ownerBusinessId = ownedBiz.id;
     _userRole        = 'owner';
+
+    // Load all franchises owned by this user
+    const { data: franchiseData } = await _supabase
+      .from('businesses')
+      .select('*')
+      .eq('parent_business_id', ownedBiz.id)
+      .order('biz_name');
+    _franchises = franchiseData || [];
+
     await applyProfile(ownedBiz);
     hideAuth();
     return;
@@ -147,6 +159,9 @@ async function applyProfile(profile) {
 
   const nameEl = document.getElementById('header-biz-name');
   if (nameEl) nameEl.textContent = profile.biz_name || 'My Business';
+
+  // Render franchise switcher for owners with franchises
+  renderFranchiseSwitcher();
 
   const userName = _currentUser?.user_metadata?.name || _currentUser?.email?.split('@')[0] || 'Account';
   const userEl   = document.getElementById('header-user');
@@ -483,7 +498,15 @@ function switchAcctTab(tab) {
     const panel = document.getElementById(`acct-panel-${t}`);
     if (panel) panel.style.display = t === tab ? 'block' : 'none';
   });
-  if (tab === 'team') loadTeamList();
+  if (tab === 'team') {
+    // Show franchises section for owners only
+    const franchisesSection = document.getElementById('franchises-section');
+    if (franchisesSection) {
+      franchisesSection.style.display = _userRole === 'owner' ? 'block' : 'none';
+    }
+    if (_userRole === 'owner') loadFranchiseList();
+    loadTeamList();
+  }
 }
 
 async function saveProfile() {
@@ -549,6 +572,152 @@ async function saveBusinessSettings() {
 }
 
 // ══════════════════════════════════════════════════════
+//  FRANCHISE MANAGEMENT
+// ══════════════════════════════════════════════════════
+
+function renderFranchiseSwitcher() {
+  const wrap = document.getElementById('franchise-switcher-wrap');
+  if (!wrap) return;
+
+  // Only show for owners
+  if (_userRole !== 'owner') { wrap.style.display = 'none'; return; }
+  // Only show if there are franchises
+  if (!_franchises.length) { wrap.style.display = 'none'; return; }
+
+  wrap.style.display = 'flex';
+  wrap.innerHTML = `
+    <select id="franchise-select" onchange="switchFranchise(this.value)"
+      style="font-size:12px;padding:5px 10px;border-radius:7px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#fff;cursor:pointer;max-width:180px;">
+      <option value="${_ownerBusinessId}" ${_businessId === _ownerBusinessId ? 'selected' : ''}>
+        🏢 Head Office
+      </option>
+      ${_franchises.map(f => `
+        <option value="${f.id}" ${_businessId === f.id ? 'selected' : ''}>
+          📍 ${f.biz_name}
+        </option>
+      `).join('')}
+    </select>
+  `;
+}
+
+async function switchFranchise(businessId) {
+  if (businessId === _businessId) return;
+
+  // Find the business profile
+  let profile;
+  if (businessId === _ownerBusinessId) {
+    const { data } = await _supabase.from('businesses').select('*').eq('id', businessId).maybeSingle();
+    profile = data;
+  } else {
+    profile = _franchises.find(f => f.id === businessId);
+  }
+  if (!profile) return;
+
+  _businessProfile = profile;
+  _businessId      = businessId;
+
+  // Reset loaded ranges so data reloads for new franchise
+  if (typeof _shiftsLoadedRange !== 'undefined')     _shiftsLoadedRange     = null;
+  if (typeof _timesheetsLoadedRange !== 'undefined') _timesheetsLoadedRange = null;
+
+  // Update header
+  const nameEl = document.getElementById('header-biz-name');
+  if (nameEl) nameEl.textContent = profile.biz_name || 'My Business';
+
+  // Reload all data for this franchise
+  toast(`Switched to ${profile.biz_name} ✓`);
+  await Promise.all([
+    dbLoadEmployees(),
+    typeof dbLoadAvailability === 'function' ? dbLoadAvailability() : Promise.resolve(),
+  ]);
+
+  _appReady = true;
+  renderDashboard();
+  renderEmployees();
+  if (typeof renderRosterFromMemory === 'function') renderRosterFromMemory();
+  renderSales();
+  if (typeof renderTimesheetsFromMemory === 'function') renderTimesheetsFromMemory();
+}
+
+async function loadFranchiseList() {
+  const el = document.getElementById('franchise-list');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--text3);font-size:13px;">Loading…</div>';
+
+  const { data } = await _supabase
+    .from('businesses')
+    .select('*')
+    .eq('parent_business_id', _ownerBusinessId || _businessId)
+    .order('biz_name');
+
+  _franchises = data || [];
+  renderFranchiseSwitcher();
+
+  if (!_franchises.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0;">No franchises yet. Add one below.</div>';
+    return;
+  }
+
+  el.innerHTML = _franchises.map(f => `
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
+      <div class="avatar" style="width:32px;height:32px;font-size:12px;flex-shrink:0;">📍</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:13px;">${f.biz_name}</div>
+        <div style="font-size:11px;color:var(--text3);">${f.abn ? 'ABN: ' + f.abn + ' · ' : ''}${f.address || ''}</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="inviteToFranchise('${f.id}','${f.biz_name.replace(/'/g,"\\'")}')">Invite User</button>
+    </div>
+  `).join('');
+}
+
+async function createFranchise() {
+  const name    = document.getElementById('franchise-name').value.trim();
+  const abn     = document.getElementById('franchise-abn').value.trim();
+  const address = document.getElementById('franchise-address').value.trim();
+  if (!name) { toast('Franchise name is required'); return; }
+
+  const parentId = _ownerBusinessId || _businessId;
+
+  const { data, error } = await _supabase.from('businesses').insert({
+    user_id:            _currentUser.id,
+    biz_name:           name,
+    abn,
+    address,
+    parent_business_id: parentId,
+    created_at:         new Date().toISOString(),
+  }).select().single();
+
+  if (error) { toast('Error: ' + error.message); return; }
+
+  // Also create an owner business_users record for this franchise
+  await _supabase.from('business_users').insert({
+    business_id:  data.id,
+    user_id:      _currentUser.id,
+    email:        _currentUser.email,
+    role:         'owner',
+    status:       'active',
+    accepted_at:  new Date().toISOString(),
+  });
+
+  toast(`${name} created ✓`);
+  document.getElementById('franchise-name').value    = '';
+  document.getElementById('franchise-abn').value     = '';
+  document.getElementById('franchise-address').value = '';
+  document.getElementById('add-franchise-form').style.display = 'none';
+  loadFranchiseList();
+}
+
+function inviteToFranchise(franchiseId, franchiseName) {
+  const labelEl = document.getElementById('invite-franchise-label');
+  const idEl    = document.getElementById('invite-franchise-id');
+  if (idEl)    idEl.value = franchiseId;
+  if (labelEl) { labelEl.textContent = `Inviting to: ${franchiseName}`; labelEl.style.display = 'block'; }
+  document.getElementById('invite-team-form').style.display = 'block';
+  document.getElementById('invite-email').value = '';
+  document.getElementById('invite-link-result').style.display = 'none';
+}
+
+// ══════════════════════════════════════════════════════
 //  TEAM MANAGEMENT
 // ══════════════════════════════════════════════════════
 
@@ -595,19 +764,21 @@ function openInviteTeamMember() {
 }
 
 async function generateTeamInvite() {
-  const email = document.getElementById('invite-email').value.trim();
-  const role  = document.getElementById('invite-role').value;
-  const resEl = document.getElementById('invite-link-result');
+  const email       = document.getElementById('invite-email').value.trim();
+  const role        = document.getElementById('invite-role').value;
+  const franchiseEl = document.getElementById('invite-franchise-id');
+  const targetBizId = franchiseEl?.value || _businessId;
+  const resEl       = document.getElementById('invite-link-result');
 
   if (!email) { toast('Please enter an email address'); return; }
-  if (!_businessId) return;
+  if (!targetBizId) return;
 
   // Generate a token
   const token   = crypto.randomUUID().replace(/-/g,'') + crypto.randomUUID().replace(/-/g,'');
   const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
   const { error } = await _supabase.from('business_users').upsert({
-    business_id:    _businessId,
+    business_id:    targetBizId,
     email,
     role,
     invited_by:     _currentUser.id,
