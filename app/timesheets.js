@@ -34,10 +34,15 @@ async function dbDeleteTimesheet(id) {
 //  RENDER
 // ══════════════════════════════════════════════════════
 
-let _tsWeekStart = getWeekStart(localDateStr(new Date()));
+let _tsWeekStart = null;
+
+function getTsWeekStart() {
+  if (!_tsWeekStart) _tsWeekStart = getWeekStart(localDateStr(new Date()));
+  return _tsWeekStart;
+}
 
 function tsWeekNav(dir) {
-  const d = parseLocalDate(_tsWeekStart);
+  const d = parseLocalDate(getTsWeekStart());
   d.setDate(d.getDate() + dir * 7);
   _tsWeekStart = localDateStr(d);
   renderTimesheets();
@@ -45,6 +50,7 @@ function tsWeekNav(dir) {
 
 // Instant render from memory — called on tab switch
 function renderTimesheetsFromMemory() {
+  _tsWeekStart = getTsWeekStart();
   const weekDates = getWeekDates(_tsWeekStart);
   const weekEnd   = weekDates[6];
 
@@ -61,6 +67,7 @@ function renderTimesheetsFromMemory() {
 
 // Full render — fetches from Supabase if week not loaded, then renders
 function renderTimesheets() {
+  _tsWeekStart = getTsWeekStart();
   const weekDates = getWeekDates(_tsWeekStart);
   const weekEnd   = weekDates[6];
 
@@ -281,9 +288,9 @@ async function approveAllPending() {
 // ══════════════════════════════════════════════════════
 
 function getPreviousWeekRange() {
-  const weekDates = getWeekDates(_tsWeekStart);
+  const weekDates = getWeekDates(getTsWeekStart());
   return {
-    prevStart: _tsWeekStart,
+    prevStart: getTsWeekStart(),
     prevEnd:   weekDates[6],
     prevDates: weekDates,
   };
