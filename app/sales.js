@@ -314,6 +314,7 @@ function renderSalesDayPanel(date) {
               <span class="field-prefix">$</span>
               <input type="number" id="input-proj-${date}" class="sales-input ${proj!=null?'has-override':''}"
                 placeholder="e.g. 4500" value="${proj??''}" min="0" step="10"
+                ${isHeadOfficeAgg ? 'readonly style="background:var(--surface2);cursor:not-allowed;"' : ''}
                 oninput="liveSalesPanelUpdate('${date}')"
                 onchange="saveSalesField('${date}','projected',this.value)">
             </div>
@@ -326,6 +327,7 @@ function renderSalesDayPanel(date) {
               <span class="field-prefix">$</span>
               <input type="number" id="input-actual-${date}" class="sales-input ${actual!=null&&isPast?'actual-highlight':''}"
                 placeholder="0" value="${actual??''}" min="0" step="10"
+                ${isHeadOfficeAgg ? 'readonly style="background:var(--surface2);cursor:not-allowed;"' : ''}
                 oninput="liveSalesPanelUpdate('${date}')"
                 onchange="saveSalesField('${date}','actual',this.value)">
             </div>
@@ -339,6 +341,7 @@ function renderSalesDayPanel(date) {
               <span class="field-prefix">$</span>
               <input type="number" id="input-spch-${date}" class="sales-input spch-target-input"
                 placeholder="e.g. 100" value="${target??''}" min="0" step="5"
+                ${isHeadOfficeAgg ? 'readonly style="background:var(--surface2);cursor:not-allowed;"' : ''}
                 oninput="liveSalesPanelUpdate('${date}')"
                 onchange="saveSalesField('${date}','target_spch',this.value)">
             </div>
@@ -492,8 +495,12 @@ function liveSalesPanelUpdate(date) {
 
 async function saveSalesField(date, field, value) {
   // Head office shows aggregated data — not editable
-  if (_userRole === 'owner' && _businessId === _ownerBusinessId && _franchises?.length > 0) {
+  const isHeadOfficeAgg = _userRole === 'owner' && 
+    (_ownerBusinessId ? _businessId === _ownerBusinessId : true) && 
+    _franchises?.length > 0;
+  if (isHeadOfficeAgg) {
     toast('Head Office shows combined franchise data — edit sales in each franchise directly');
+    renderSales(); // Reset inputs to aggregated values
     return;
   }
   if (!salesData[date]) salesData[date] = {};
