@@ -441,6 +441,9 @@ function showPage(id) {
 function renderDashboard() {
   if (!_appReady) return;
   const today     = localDateStr(new Date());
+
+  // Render franchise analytics for owners
+  renderFranchiseAnalytics();
   const weekDates = getWeekDates(getWeekStart(today));
 
   const totalActive = employees.filter(e => e.active !== false).length;
@@ -579,6 +582,12 @@ function applyRoleGating() {
   const bizItem  = document.getElementById('dd-business-item');
   if (teamItem) teamItem.style.display = canAccess('team') ? '' : 'none';
   if (bizItem)  bizItem.style.display  = canAccess('business') ? '' : 'none';
+
+  // Timesheet buttons
+  const approveAllBtn = document.getElementById('ts-approve-all-btn');
+  const pushBtn       = document.getElementById('ts-push-btn');
+  if (approveAllBtn) approveAllBtn.style.display = canAccess('approve_ts')   ? '' : 'none';
+  if (pushBtn)       pushBtn.style.display       = canAccess('push_payslip') ? '' : 'none';
 
   // Team/Business/Billing tabs in modal
   const teamTab    = document.getElementById('acct-tab-team');
@@ -1222,4 +1231,184 @@ function showBillingBanner() {
       banner.style.display = 'none';
     }
   });
+}
+
+// ══════════════════════════════════════════════════════
+//  FRANCHISE ANALYTICS
+// ══════════════════════════════════════════════════════
+
+let _analyticsTab    = 'overview';
+let _analyticsPeriod = 'week';
+
+const FRANCHISE_COLOURS = [
+  '#3d5afe','#d4a017','#38a169','#e53e3e','#805ad5','#dd6b20','#0bc5ea','#ed64a6'
+];
+
+function switchAnalyticsTab(tab) {
+  _analyticsTab = tab;
+  document.querySelectorAll('.analytics-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById(`atab-${tab}`)?.classList.add('active');
+  renderFranchiseAnalytics();
+}
+
+function switchAnalyticsPeriod(period) {
+  _analyticsPeriod = period;
+  document.querySelectorAll('.analytics-period').forEach(b => b.classList.remove('active'));
+  document.getElementById(`aperiod-${period}`)?.classList.add('active');
+  renderFranchiseAnalytics();
+}
+
+function getPeriodRange(period) {
+  const now   = new Date();
+  const today = localDateStr(now);
+  let start, end;
+
+  if (period === 'week') {
+    start = getWeekStart(today);
+    end   = getWeekDates(start)[6];
+  } else if (period === 'month') {
+    start = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
+    end   = localDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  } else if (period === 'quarter') {
+    const q = Math.floor(now.getMonth() / 3);
+    start   = localDateStr(new Date(now.getFullYear(), q * 3, 1));
+    end     = localDateStr(new Date(now.getFullYear(), q * 3 + 3, 0));
+  } else { // year
+    start = localDateStr(new Date(now.getFullYear(), 0, 1));
+    end   = localDateStr(new Date(now.getFullYear(), 11, 31));
+  }
+  return { start, end };
+}
+
+async function loadFranchiseAnalyticsData() {
+  const { start, end } = getPeriodRange(_analyticsPeriod);
+  const supabase = _supabase;
+
+  // Load data for all franchises + head office
+  const allBizIds = [_ownerBusinessId, ..._franchises.map(f => f.id)].filter(Boolean);
+  const results   = [];
+
+  for (const bizId of allBizIds) {
+    const biz = bizId === _ownerBusinessId
+      ? { id: bizId, biz_name: 'Head Office' }
+      : _franchises.find(f => f.id === bizId);
+    if (!biz) continue;
+
+    // Employees for this business
+    const { data: emps } = await supabase.from('employees').select('*').eq('business_id', bizId);
+    const { data: bizShifts } = await supabase.from('shifts')
+      .select('*').eq('business_id', bizId)
+      .gte('date', start).lte('date', end);
+    const { data: salesRows } = await supabase.from('sales_data')
+      .select('*').eq('business_id', bizId)
+      .gte('date', start).lte('date', end);
+
+    // Calculate labour cost
+    let labourCost = 0;
+    let totalHours = 0;
+    (bizShifts || []).forEach(shift => {
+      const emp = (emps || []).find(e => e.id === shift.employee_id);
+      if (!emp) return;
+      const pay = calcShiftPay(shift, emp);
+      labourCost += pay.totalPay;
+      totalHours += pay.workedHours;
+    });
+
+    // Calculate revenue
+    const revenue = (salesRows || []).reduce((s, r) => s + (r.projected_sales || 0), 0);
+
+    // SPCH
+    const spch = totalHours > 0 ? revenue / totalHours : 0;
+
+    results.push({
+      id:         biz.id,
+      name:       biz.biz_name,
+      labourCost,
+      revenue,
+      spch,
+      totalHours,
+      empCount:   (emps || []).filter(e => e.active !== false).length,
+    });
+  }
+  return results;
+}
+
+async function renderFranchiseAnalytics() {
+  const el = document.getElementById('analytics-chart');
+  if (!el) return;
+
+  // Only show for owners with franchises
+  const analyticsSection = document.getElementById('franchise-analytics');
+  if (!analyticsSection) return;
+  if (_userRole !== 'owner' || !_franchises?.length) {
+    analyticsSection.style.display = 'none';
+    return;
+  }
+  analyticsSection.style.display = 'block';
+
+  el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text3);font-size:13px;">Loading analytics…</div>';
+
+  const data = await loadFranchiseAnalyticsData();
+  if (!data.length) { el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text3);">No data for this period.</div>'; return; }
+
+  if (_analyticsTab === 'overview') {
+    renderOverviewAnalytics(el, data);
+  } else {
+    renderBarChart(el, data, _analyticsTab);
+  }
+}
+
+function renderOverviewAnalytics(el, data) {
+  const totalLabour  = data.reduce((s, d) => s + d.labourCost, 0);
+  const totalRevenue = data.reduce((s, d) => s + d.revenue, 0);
+  const avgSpch      = data.filter(d => d.spch > 0).reduce((s, d) => s + d.spch, 0) / (data.filter(d => d.spch > 0).length || 1);
+
+  el.innerHTML = `
+    <div class="analytics-overview-grid">
+      <div class="kpi"><div class="kpi-label">Total Labour</div><div class="kpi-value negative">${fmt(totalLabour)}</div></div>
+      <div class="kpi"><div class="kpi-label">Total Revenue</div><div class="kpi-value positive">${fmt(totalRevenue)}</div></div>
+      <div class="kpi"><div class="kpi-label">Avg SPCH</div><div class="kpi-value">${fmt(avgSpch)}</div></div>
+      <div class="kpi"><div class="kpi-label">Locations</div><div class="kpi-value">${data.length}</div></div>
+    </div>
+    <div class="analytics-bars">
+      ${data.map((d, i) => {
+        const maxVal = Math.max(...data.map(x => x.labourCost), 1);
+        const pct    = Math.max((d.labourCost / maxVal) * 100, 2);
+        return `
+          <div class="analytics-bar-wrap" title="${d.name}: ${fmt(d.labourCost)} labour">
+            <div class="analytics-bar-value">${fmt(d.labourCost)}</div>
+            <div class="analytics-bar" style="height:${pct}%;background:${FRANCHISE_COLOURS[i % FRANCHISE_COLOURS.length]};"></div>
+            <div class="analytics-bar-label">${d.name}</div>
+          </div>`;
+      }).join('')}
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center;">Labour cost by location</div>
+  `;
+}
+
+function renderBarChart(el, data, metric) {
+  const metricMap = {
+    labour:  { key: 'labourCost', label: 'Labour Cost',  fmt: v => fmt(v),   colour: '#e53e3e' },
+    revenue: { key: 'revenue',    label: 'Revenue',       fmt: v => fmt(v),   colour: '#38a169' },
+    spch:    { key: 'spch',       label: 'SPCH',          fmt: v => fmt(v),   colour: '#3d5afe' },
+  };
+  const m      = metricMap[metric];
+  const maxVal = Math.max(...data.map(d => d[m.key]), 1);
+
+  el.innerHTML = `
+    <div class="analytics-bars">
+      ${data.map((d, i) => {
+        const val = d[m.key];
+        const pct = Math.max((val / maxVal) * 100, 2);
+        const colour = FRANCHISE_COLOURS[i % FRANCHISE_COLOURS.length];
+        return `
+          <div class="analytics-bar-wrap" title="${d.name}: ${m.fmt(val)}">
+            <div class="analytics-bar-value">${m.fmt(val)}</div>
+            <div class="analytics-bar" style="height:${pct}%;background:${colour};"></div>
+            <div class="analytics-bar-label">${d.name}</div>
+          </div>`;
+      }).join('')}
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center;">${m.label} by location</div>
+  `;
 }
