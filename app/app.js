@@ -157,6 +157,13 @@ async function applyProfile(profile) {
   // Apply role gating
   applyRoleGating();
 
+  // Initialise custom award from business profile so dashboard can use it immediately
+  if (typeof DEFAULT_CUSTOM_AWARD !== 'undefined') {
+    _customAward = profile.custom_award
+      ? JSON.parse(JSON.stringify(profile.custom_award))
+      : JSON.parse(JSON.stringify(DEFAULT_CUSTOM_AWARD));
+  }
+
   const today     = localDateStr(new Date());
   const weekStart = getWeekStart(today);
   const weekEnd   = getWeekDates(weekStart)[6];
@@ -339,8 +346,8 @@ function renderDashboard() {
   const phRateEl = document.getElementById('dash-ph-rate');
   if (phEl) {
     // Get PH multiplier from custom award if active, otherwise MA000003 default (2.5)
-    const phMultiplier = (typeof _customAward !== 'undefined' && _customAward?.publicHoliday)
-      ? _customAward.publicHoliday
+    const phMultiplier = (typeof _customAward !== 'undefined' && _customAward?.permanent?.publicHoliday)
+      ? _customAward.permanent.publicHoliday
       : 2.5;
     const phPct  = Math.round(phMultiplier * 100) + '%';
     const awardName = (typeof _customAward !== 'undefined' && _customAward?.name)
