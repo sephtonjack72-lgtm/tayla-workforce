@@ -43,20 +43,18 @@ async function dbDeleteTimesheet(id) {
 //  RENDER
 // ══════════════════════════════════════════════════════
 
-let _tsWeekStart = getWeekStart(new Date().toISOString().split('T')[0]);
+let _tsWeekStart = getWeekStart(localDateStr(new Date()));
 
 function tsWeekNav(dir) {
-  const d = new Date(_tsWeekStart);
+  const d = parseLocalDate(_tsWeekStart);
   d.setDate(d.getDate() + dir * 7);
-  _tsWeekStart = d.toISOString().split('T')[0];
+  _tsWeekStart = localDateStr(d);
   renderTimesheets();
 }
 
 function renderTimesheets() {
   const weekDates = getWeekDates(_tsWeekStart);
   const weekEnd   = weekDates[6];
-
-  Promise.resolve(dbLoadTimesheets(_tsWeekStart, weekEnd)).then(() => renderTimesheetTable(weekDates));
 
   const label = document.getElementById('ts-week-label');
   if (label) {
@@ -66,6 +64,8 @@ function renderTimesheets() {
   }
 
   renderTimesheetKPIs(weekDates);
+
+  dbLoadTimesheets(_tsWeekStart, weekEnd).then(() => renderTimesheetTable(weekDates));
 }
 
 function renderTimesheetTable(weekDates) {
@@ -130,7 +130,7 @@ function renderTimesheetTable(weekDates) {
           </div>
         </td>
         <td style="font-size:12px;">
-          <div style="font-weight:500;">${new Date(date).toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'})}</div>
+          <div style="font-weight:500;">${parseLocalDate(date).toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'})}</div>
           ${isPublicHoliday(date) ? '<span style="font-size:10px;color:var(--danger);">Public Holiday</span>' : ''}
         </td>
         <td>
@@ -270,7 +270,7 @@ async function approveAllPending() {
 // ══════════════════════════════════════════════════════
 
 function getPreviousWeekRange() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDateStr(new Date());
   const thisMonday = getWeekStart(today);
   const d = parseLocalDate(thisMonday);
   d.setDate(d.getDate() - 7);
@@ -289,7 +289,7 @@ async function openPushPayslipsModal() {
   const modal = document.getElementById('push-payslips-modal');
   if (!modal) return;
 
-  const periodLabel = `${new Date(prevStart).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} — ${new Date(prevEnd).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  const periodLabel = `${parseLocalDate(prevStart).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} — ${parseLocalDate(prevEnd).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
 
   // Build preview rows
   const rows = activeEmps.map(emp => {
