@@ -322,6 +322,19 @@ async function applyProfile(profile) {
 
   // Handle team invite token if present in URL
   handleTeamInviteToken();
+
+  // Show billing banner if needed
+  showBillingBanner();
+
+  // Handle billing redirect params
+  const billingParam = new URLSearchParams(window.location.search).get('billing');
+  if (billingParam === 'success') {
+    toast('🎉 Subscription activated! Welcome to Tayla Workforce.');
+    window.history.replaceState({}, '', window.location.pathname);
+    // Reload business profile to get updated subscription status
+    const { data } = await _supabase.from('businesses').select('*').eq('id', _businessId).maybeSingle();
+    if (data) { _businessProfile = data; }
+  }
 }
 
 // ── Business setup
@@ -565,11 +578,13 @@ function applyRoleGating() {
   if (teamItem) teamItem.style.display = canAccess('team') ? '' : 'none';
   if (bizItem)  bizItem.style.display  = canAccess('business') ? '' : 'none';
 
-  // Team/Business tabs in modal
-  const teamTab = document.getElementById('acct-tab-team');
-  const bizTab  = document.getElementById('acct-tab-business');
-  if (teamTab) teamTab.style.display = canAccess('team') ? '' : 'none';
-  if (bizTab)  bizTab.style.display  = canAccess('business') ? '' : 'none';
+  // Team/Business/Billing tabs in modal
+  const teamTab    = document.getElementById('acct-tab-team');
+  const bizTab     = document.getElementById('acct-tab-business');
+  const billingTab = document.getElementById('acct-tab-billing');
+  if (teamTab)    teamTab.style.display    = canAccess('team') ? '' : 'none';
+  if (bizTab)     bizTab.style.display     = canAccess('business') ? '' : 'none';
+  if (billingTab) billingTab.style.display = _userRole === 'owner' ? '' : 'none';
 }
 
 // ══════════════════════════════════════════════════════
@@ -599,13 +614,12 @@ function openAccountSettings(tab = 'profile') {
 }
 
 function switchAcctTab(tab) {
-  ['profile','team','business'].forEach(t => {
+  ['profile','team','business','billing'].forEach(t => {
     document.getElementById(`acct-tab-${t}`)?.classList.toggle('active', t === tab);
     const panel = document.getElementById(`acct-panel-${t}`);
     if (panel) panel.style.display = t === tab ? 'block' : 'none';
   });
   if (tab === 'team') {
-    // Show franchises section for owners only
     const franchisesSection = document.getElementById('franchises-section');
     if (franchisesSection) {
       franchisesSection.style.display = _userRole === 'owner' ? 'block' : 'none';
@@ -613,6 +627,7 @@ function switchAcctTab(tab) {
     if (_userRole === 'owner') loadFranchiseList();
     loadTeamList();
   }
+  if (tab === 'billing') loadBillingPanel();
 }
 
 async function saveProfile() {
@@ -1004,3 +1019,203 @@ document.addEventListener('visibilitychange', () => {
     window.location.reload();
   }
 });
+
+// ══════════════════════════════════════════════════════
+//  BILLING
+// ══════════════════════════════════════════════════════
+
+async function getBillingStatus() {
+  if (!_businessProfile) return null;
+  const status    = _businessProfile.subscription_status || 'trial';
+  const trialEnd  = _businessProfile.trial_ends_at ? new Date(_businessProfile.trial_ends_at) : null;
+  const periodEnd = _businessProfile.current_period_end ? new Date(_businessProfile.current_period_end) : null;
+  const graceEnd  = _businessProfile.grace_period_end ? new Date(_businessProfile.grace_period_end) : null;
+  const now       = new Date();
+
+  // Check if trial has expired
+  if (status === 'trial' && trialEnd && now > trialEnd) return 'trial_expired';
+  // Check if grace period has expired
+  if (status === 'grace' && graceEnd && now > graceEnd) return 'locked';
+  return status;
+}
+
+async function loadBillingPanel() {
+  if (_userRole !== 'owner') return;
+
+  const statusEl   = document.getElementById('billing-status-badge');
+  const detailEl   = document.getElementById('billing-status-detail');
+  const breakdownEl = document.getElementById('billing-breakdown');
+  const subBtn     = document.getElementById('billing-subscribe-btn');
+  const portalBtn  = document.getElementById('billing-portal-btn');
+  if (!statusEl || !detailEl) return;
+
+  const status   = await getBillingStatus();
+  const trialEnd = _businessProfile?.trial_ends_at ? new Date(_businessProfile.trial_ends_at) : null;
+  const periodEnd = _businessProfile?.current_period_end ? new Date(_businessProfile.current_period_end) : null;
+
+  // Count employees and franchises for cost breakdown
+  const empCount      = (typeof employees !== 'undefined') ? employees.length : 0;
+  const franchiseCount = _franchises?.length || 0;
+  const monthlyCost   = (empCount * 4) + (franchiseCount * 2);
+
+  // Breakdown
+  if (breakdownEl) {
+    breakdownEl.innerHTML = `
+      <div style="background:var(--surface2);border-radius:10px;padding:16px;border:1px solid var(--border);">
+        <div style="font-weight:700;font-size:13px;margin-bottom:12px;">Monthly Cost Breakdown</div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border);">
+          <span>${empCount} employees × $4.00</span>
+          <span style="font-weight:600;">$${(empCount * 4).toFixed(2)}</span>
+        </div>
+        ${franchiseCount > 0 ? `
+        <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border);">
+          <span>${franchiseCount} franchise${franchiseCount > 1 ? 's' : ''} × $2.00</span>
+          <span style="font-weight:600;">$${(franchiseCount * 2).toFixed(2)}</span>
+        </div>` : ''}
+        <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;padding:8px 0;color:var(--accent);">
+          <span>Total per month</span>
+          <span>$${monthlyCost.toFixed(2)} AUD</span>
+        </div>
+      </div>`;
+  }
+
+  // Status display
+  const fmt = (d: Date) => d.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  const statusMap: Record<string, { badge: string; color: string; detail: string; showSub: boolean; showPortal: boolean }> = {
+    trial: {
+      badge: '🎉 Free Trial',
+      color: 'var(--accent2)',
+      detail: trialEnd ? `Your free trial ends on <strong>${fmt(trialEnd)}</strong>. Subscribe before then to keep access.` : 'You are on a free trial.',
+      showSub: true, showPortal: false,
+    },
+    trial_expired: {
+      badge: '⚠️ Trial Expired',
+      color: 'var(--danger)',
+      detail: 'Your free trial has ended. Subscribe to restore access.',
+      showSub: true, showPortal: false,
+    },
+    active: {
+      badge: '✓ Active',
+      color: 'var(--success)',
+      detail: periodEnd ? `Your subscription renews on <strong>${fmt(periodEnd)}</strong>.` : 'Your subscription is active.',
+      showSub: false, showPortal: true,
+    },
+    grace: {
+      badge: '⚠️ Payment Failed',
+      color: 'var(--accent2)',
+      detail: `Your last payment failed. Update your payment method within 10 days to avoid losing access.`,
+      showSub: false, showPortal: true,
+    },
+    locked: {
+      badge: '🔒 Locked',
+      color: 'var(--danger)',
+      detail: 'Access suspended due to non-payment. Subscribe to restore access.',
+      showSub: true, showPortal: false,
+    },
+    cancelled: {
+      badge: '✕ Cancelled',
+      color: 'var(--text3)',
+      detail: periodEnd ? `Access continues until <strong>${fmt(periodEnd)}</strong>.` : 'Your subscription has been cancelled.',
+      showSub: true, showPortal: true,
+    },
+  };
+
+  const s = statusMap[status || 'trial'] || statusMap.trial;
+  statusEl.innerHTML = `<span style="padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;background:${s.color}22;color:${s.color};">${s.badge}</span>`;
+  detailEl.innerHTML = s.detail;
+  if (subBtn)    subBtn.style.display    = s.showSub ? '' : 'none';
+  if (portalBtn) portalBtn.style.display = s.showPortal ? '' : 'none';
+}
+
+async function startCheckout() {
+  const btn = document.getElementById('billing-subscribe-btn') || document.getElementById('billing-banner-btn');
+  if (btn) { btn.textContent = 'Loading…'; (btn as HTMLButtonElement).disabled = true; }
+
+  try {
+    const token = _supabase.changedAccessToken || (await _supabase.auth.getSession())?.data?.session?.access_token;
+    const res   = await fetch(`https://whedwekxzjfqwjuoarid.supabase.co/functions/v1/create-checkout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action: 'checkout' }),
+    });
+    const data = await res.json();
+    if (data.url) window.location.href = data.url;
+    else { toast('Error: ' + (data.error || 'Could not create checkout')); }
+  } catch (err) {
+    toast('Error: ' + err);
+  } finally {
+    if (btn) { btn.textContent = 'Subscribe Now'; (btn as HTMLButtonElement).disabled = false; }
+  }
+}
+
+async function openBillingPortal() {
+  const btn = document.getElementById('billing-portal-btn');
+  if (btn) { btn.textContent = 'Loading…'; (btn as HTMLButtonElement).disabled = true; }
+
+  try {
+    const token = _supabase.changedAccessToken || (await _supabase.auth.getSession())?.data?.session?.access_token;
+    const res   = await fetch(`https://whedwekxzjfqwjuoarid.supabase.co/functions/v1/create-checkout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action: 'portal' }),
+    });
+    const data = await res.json();
+    if (data.url) window.location.href = data.url;
+    else { toast('Error: ' + (data.error || 'Could not open portal')); }
+  } catch (err) {
+    toast('Error: ' + err);
+  } finally {
+    if (btn) { btn.textContent = 'Manage Billing'; (btn as HTMLButtonElement).disabled = false; }
+  }
+}
+
+function showBillingBanner() {
+  if (_userRole !== 'owner') return;
+  getBillingStatus().then(status => {
+    const banner  = document.getElementById('billing-banner');
+    const msgEl   = document.getElementById('billing-banner-msg');
+    const btn     = document.getElementById('billing-banner-btn');
+    if (!banner || !msgEl) return;
+
+    const trialEnd  = _businessProfile?.trial_ends_at ? new Date(_businessProfile.trial_ends_at) : null;
+    const graceEnd  = _businessProfile?.grace_period_end ? new Date(_businessProfile.grace_period_end) : null;
+    const now       = new Date();
+
+    let show = false;
+    let msg  = '';
+    let bgColor = '';
+
+    if (status === 'trial' && trialEnd) {
+      const daysLeft = Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysLeft <= 7) {
+        show = true;
+        msg = `⏳ Your free trial ends in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}. Subscribe to keep access.`;
+        bgColor = '#7c3aed';
+      }
+    } else if (status === 'trial_expired') {
+      show = true;
+      msg = '⚠️ Your free trial has expired. Subscribe to restore full access.';
+      bgColor = 'var(--danger)';
+    } else if (status === 'grace') {
+      const daysLeft = graceEnd ? Math.ceil((graceEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : 10;
+      show = true;
+      msg = `⚠️ Payment failed. Update your payment method within ${daysLeft} day${daysLeft !== 1 ? 's' : ''} to avoid lockout.`;
+      bgColor = '#d97706';
+    } else if (status === 'locked') {
+      show = true;
+      msg = '🔒 Your account is locked due to non-payment. Subscribe to restore access.';
+      bgColor = 'var(--danger)';
+      if (btn) btn.textContent = 'Subscribe Now';
+    }
+
+    if (show) {
+      banner.style.display = 'flex';
+      banner.style.background = bgColor;
+      banner.style.color = '#fff';
+      msgEl.textContent = msg;
+    } else {
+      banner.style.display = 'none';
+    }
+  });
+}
