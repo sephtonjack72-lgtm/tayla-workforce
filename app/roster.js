@@ -275,7 +275,7 @@ function renderGanttPanel(date) {
       <div>
         <div style="font-family:'DM Serif Display',serif;font-size:22px;line-height:1.1;">
           ${DAY_LONG[dayIdx] || '—'}
-          ${isPH ? `<span style="font-size:11px;background:#fde2e2;color:var(--danger);padding:3px 9px;border-radius:99px;margin-left:8px;font-family:'DM Sans',sans-serif;">Public Holiday ${Math.round(getPenaltyMultiplier('publicHoliday','permanent')*100)}%</span>` : ''}
+          ${isPH ? '<span style="font-size:11px;background:#fde2e2;color:var(--danger);padding:3px 9px;border-radius:99px;margin-left:8px;font-family:\'DM Sans\',sans-serif;">Public Holiday 250%</span>' : ''}
           ${unassignedCount ? `<span style="font-size:11px;background:#fff3cd;color:#856404;padding:3px 9px;border-radius:99px;margin-left:8px;font-family:'DM Sans',sans-serif;">⚠ ${unassignedCount} unassigned</span>` : ''}
         </div>
         <div style="font-size:12px;color:var(--text3);margin-top:2px;">${d.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
@@ -783,6 +783,7 @@ async function deleteUnassignedShift(shiftId) {
 
 // ── 1. CREATE — drag on empty track to draw a new shift
 function onTrackMouseDown(e, empId, date) {
+  if (!canAccess('roster_edit')) return; // Payroll officers view only
   if (e.target.closest('.shift-bar')) return;
   e.preventDefault();
   closeAssignPopover();
@@ -855,6 +856,7 @@ function onTrackClick(e, empId, date) {
 
 // ── 2. MOVE — drag existing bar
 function onBarMouseDown(e, shiftId) {
+  if (!canAccess('roster_edit')) return; // Payroll officers view only
   e.preventDefault();
   closeAssignPopover();
   const shift   = shifts.find(s => s.id === shiftId);
@@ -908,6 +910,7 @@ function onBarMouseDown(e, shiftId) {
 
 // ── 3. RESIZE — drag left/right handle
 function onHandleMouseDown(e, shiftId, side) {
+  if (!canAccess('roster_edit')) return; // Payroll officers view only
   e.preventDefault();
   closeAssignPopover();
   const shift   = shifts.find(s => s.id === shiftId);
@@ -1053,6 +1056,7 @@ function refreshRosterDaySpch(date) {
 // ══════════════════════════════════════════════════════
 
 async function openAddShift(employeeId, date, startTime, endTime) {
+  if (!canAccess('roster_edit')) return;
   // If called from the "+ Add Shift" button (no employee), instantly drop an
   // unassigned bar onto the gantt and open the assign popover — no modal needed.
   if (!employeeId) {
@@ -1153,7 +1157,7 @@ function updateShiftPreview() {
         ${pay.laundryAllowance>0?`<span>Laundry</span><span class="mono">${fmt(pay.laundryAllowance)}</span>`:''}
         <span style="font-weight:700;color:var(--text);">Estimated pay</span><span class="mono" style="font-weight:700;font-size:14px;">${fmt(pay.totalPay)}</span>
       </div>
-      ${isPublicHoliday(date)?`<div style="color:var(--danger);margin-top:8px;font-size:11px;">🎉 Public holiday — ${Math.round(getPenaltyMultiplier('publicHoliday','permanent')*100)}% applies</div>`:''}
+      ${isPublicHoliday(date)?'<div style="color:var(--danger);margin-top:8px;font-size:11px;">🎉 Public holiday — 250% applies</div>':''}
     </div>`;
 }
 
@@ -1183,6 +1187,7 @@ async function saveShift() {
 }
 
 async function deleteShiftConfirm() {
+  if (!canAccess('roster_edit')) return;
   const id = document.getElementById('shift-edit-id').value;
   if (!id || !confirm('Delete this shift?')) return;
   const shift = shifts.find(s => s.id === id);
