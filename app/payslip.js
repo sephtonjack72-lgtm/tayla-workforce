@@ -95,8 +95,8 @@ async function getYTDFigures(employeeId, upToDate) {
     .select('gross_pay, tax_withheld, super_amount')
     .eq('employee_id', employeeId)
     .eq('business_id', _businessId)
-    .gte('week_end', fyStart)
-    .lte('week_end', upToDate);
+    .gte('pay_period_end', fyStart)
+    .lte('pay_period_end', upToDate);
 
   if (!data) return { gross: 0, tax: 0, super: 0 };
 
@@ -292,16 +292,15 @@ async function savePayslipRecord() {
   const { emp, weekStart, weekEnd, totalGross, totalTax, superAmount, netPay } = _payslipData;
 
   const { error } = await _supabase.from('payslips').upsert({
-    business_id:  _businessId,
-    employee_id:  emp.id,
-    week_start:   weekStart,
-    week_end:     weekEnd,
-    gross_pay:    totalGross,
-    tax_withheld: totalTax,
-    super_amount: superAmount,
-    net_pay:      netPay,
-    created_at:   new Date().toISOString(),
-  }, { onConflict: 'business_id,employee_id,week_start' });
+    business_id:      _businessId,
+    employee_id:      emp.id,
+    pay_period_start: weekStart,
+    pay_period_end:   weekEnd,
+    gross_pay:        totalGross,
+    tax_withheld:     totalTax,
+    super_amount:     superAmount,
+    net_pay:          netPay,
+  }, { onConflict: 'business_id,employee_id,pay_period_start' });
 
   if (error) console.error('Save payslip failed:', error);
 }
@@ -352,7 +351,7 @@ async function pushPayslipToTayla() {
       .select('id, employee_id')
       .eq('business_id', _businessId)
       .eq('employee_id', emp.id)
-      .eq('week_start', weekStart)
+      .eq('pay_period_start', weekStart)
       .maybeSingle();
 
     if (!saved) throw new Error('Could not find saved payslip record');
