@@ -11,6 +11,7 @@ const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 let _currentUser     = null;
 let _businessProfile = null;
 let _businessId      = null;
+let _userRole        = null; // 'owner' | 'franchise' | 'manager' | 'payroll_officer'
 
 // ── Loaded range tracking — prevents redundant Supabase fetches
 let _shiftsLoadedRange     = null; // e.g. '2026-03-30:2026-04-05'
@@ -95,19 +96,40 @@ async function signOut() {
 // ══════════════════════════════════════════════════════
 
 async function afterLogin() {
-  const { data } = await _supabase
+  // First check if they own a business
+  const { data: ownedBiz } = await _supabase
     .from('businesses').select('*')
     .eq('user_id', _currentUser.id)
     .maybeSingle();
 
-  if (data) {
-    _businessProfile = data;
-    _businessId      = data.id;
-    await applyProfile(data);
+  if (ownedBiz) {
+    _businessProfile = ownedBiz;
+    _businessId      = ownedBiz.id;
+    _userRole        = 'owner';
+    await applyProfile(ownedBiz);
     hideAuth();
-  } else {
-    showBusinessSetup();
+    return;
   }
+
+  // Check if they're a team member on another business
+  const { data: membership } = await _supabase
+    .from('business_users')
+    .select('*, businesses(*)')
+    .eq('user_id', _currentUser.id)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (membership) {
+    _businessProfile = membership.businesses;
+    _businessId      = membership.business_id;
+    _userRole        = membership.role;
+    await applyProfile(membership.businesses);
+    hideAuth();
+    return;
+  }
+
+  // New user — show business setup
+  showBusinessSetup();
 }
 
 async function applyProfile(profile) {
@@ -115,8 +137,25 @@ async function applyProfile(profile) {
 
   const nameEl = document.getElementById('header-biz-name');
   if (nameEl) nameEl.textContent = profile.biz_name || 'My Business';
-  const userEl = document.getElementById('header-user');
-  if (userEl) userEl.textContent = _currentUser?.email?.split('@')[0] || 'Account';
+
+  const userName = _currentUser?.user_metadata?.name || _currentUser?.email?.split('@')[0] || 'Account';
+  const userEl   = document.getElementById('header-user');
+  if (userEl) userEl.textContent = userName;
+
+  // Avatar initials
+  const avatarEl = document.getElementById('header-avatar');
+  if (avatarEl) avatarEl.textContent = userName[0]?.toUpperCase() || '?';
+
+  // Dropdown info
+  const ddName  = document.getElementById('dd-user-name');
+  const ddEmail = document.getElementById('dd-user-email');
+  const ddRole  = document.getElementById('dd-role-badge');
+  if (ddName)  ddName.textContent  = userName;
+  if (ddEmail) ddEmail.textContent = _currentUser?.email || '';
+  if (ddRole)  ddRole.innerHTML    = `<span class="role-badge role-${_userRole}">${roleName(_userRole)}</span>`;
+
+  // Apply role gating
+  applyRoleGating();
 
   const today     = localDateStr(new Date());
   const weekStart = getWeekStart(today);
@@ -142,6 +181,9 @@ async function applyProfile(profile) {
   renderSales();
   if (typeof renderTimesheetsFromMemory === 'function') renderTimesheetsFromMemory();
   if (typeof initAwardPage === 'function') initAwardPage();
+
+  // Handle team invite token if present in URL
+  handleTeamInviteToken();
 }
 
 // ── Business setup
@@ -327,3 +369,274 @@ document.addEventListener('click', e => {
   const drop = document.getElementById('user-dropdown');
   if (wrap && drop && !wrap.contains(e.target)) drop.style.display = 'none';
 });
+
+// ══════════════════════════════════════════════════════
+//  ROLE HELPERS
+// ══════════════════════════════════════════════════════
+
+function roleName(role) {
+  return { owner: 'Owner', franchise: 'Franchise', manager: 'Manager', payroll_officer: 'Payroll Officer' }[role] || role;
+}
+
+function canAccess(feature) {
+  const r = _userRole;
+  const rules = {
+    dashboard:   ['owner','franchise','manager','payroll_officer'],
+    employees:   ['owner','franchise','manager','payroll_officer'],
+    roster:      ['owner','franchise','manager','payroll_officer'],
+    sales:       ['owner','franchise','manager'],
+    timesheets:  ['owner','franchise','manager','payroll_officer'],
+    awards:      ['owner','franchise','manager','payroll_officer'],
+    push_payslip:['owner','franchise','payroll_officer'],
+    approve_ts:  ['owner','franchise','manager'],
+    team:        ['owner','franchise'],
+    business:    ['owner','franchise'],
+    // Edit restrictions
+    roster_edit: ['owner','franchise','manager'],
+    ts_edit:     ['owner','franchise','manager'],
+  };
+  return (rules[feature] || []).includes(r);
+}
+
+function applyRoleGating() {
+  // Nav tabs
+  const tabMap = { sales: 'sales', awards: 'awards' };
+  Object.entries(tabMap).forEach(([page, feature]) => {
+    const tab = document.querySelector(`[data-page="${page}"]`);
+    if (tab) tab.style.display = canAccess(feature) ? '' : 'none';
+  });
+
+  // Team/Business items in dropdown
+  const teamItem = document.getElementById('dd-team-item');
+  const bizItem  = document.getElementById('dd-business-item');
+  if (teamItem) teamItem.style.display = canAccess('team') ? '' : 'none';
+  if (bizItem)  bizItem.style.display  = canAccess('business') ? '' : 'none';
+
+  // Team/Business tabs in modal
+  const teamTab = document.getElementById('acct-tab-team');
+  const bizTab  = document.getElementById('acct-tab-business');
+  if (teamTab) teamTab.style.display = canAccess('team') ? '' : 'none';
+  if (bizTab)  bizTab.style.display  = canAccess('business') ? '' : 'none';
+}
+
+// ══════════════════════════════════════════════════════
+//  ACCOUNT SETTINGS MODAL
+// ══════════════════════════════════════════════════════
+
+function openAccountSettings(tab = 'profile') {
+  document.getElementById('user-dropdown').style.display = 'none';
+
+  // Populate profile tab
+  document.getElementById('acct-email').value        = _currentUser?.email || '';
+  document.getElementById('acct-name').value         = _currentUser?.user_metadata?.name || '';
+  document.getElementById('acct-role-display').value = roleName(_userRole);
+  document.getElementById('acct-new-pw').value       = '';
+  document.getElementById('acct-confirm-pw').value   = '';
+  document.getElementById('acct-profile-msg').textContent = '';
+
+  // Populate business tab
+  document.getElementById('biz-name-input').value    = _businessProfile?.biz_name   || '';
+  document.getElementById('biz-abn-input').value     = _businessProfile?.abn        || '';
+  document.getElementById('biz-address-input').value = _businessProfile?.address    || '';
+  document.getElementById('biz-phone-input').value   = _businessProfile?.phone      || '';
+
+  switchAcctTab(tab);
+  openModal('account-modal');
+  if (tab === 'team') loadTeamList();
+}
+
+function switchAcctTab(tab) {
+  ['profile','team','business'].forEach(t => {
+    document.getElementById(`acct-tab-${t}`)?.classList.toggle('active', t === tab);
+    const panel = document.getElementById(`acct-panel-${t}`);
+    if (panel) panel.style.display = t === tab ? 'block' : 'none';
+  });
+  if (tab === 'team') loadTeamList();
+}
+
+async function saveProfile() {
+  const name   = document.getElementById('acct-name').value.trim();
+  const newPw  = document.getElementById('acct-new-pw').value;
+  const confPw = document.getElementById('acct-confirm-pw').value;
+  const msgEl  = document.getElementById('acct-profile-msg');
+  msgEl.style.color = 'var(--danger)';
+
+  const updates = {};
+  if (name) updates.data = { name };
+
+  if (newPw) {
+    if (newPw.length < 6) { msgEl.textContent = 'Password must be at least 6 characters.'; return; }
+    if (newPw !== confPw) { msgEl.textContent = 'Passwords do not match.'; return; }
+    updates.password = newPw;
+  }
+
+  if (!Object.keys(updates).length) { msgEl.textContent = 'Nothing to save.'; return; }
+
+  const { error } = await _supabase.auth.updateUser(updates);
+  if (error) { msgEl.textContent = error.message; return; }
+
+  // Update header display name
+  if (name) {
+    const userEl   = document.getElementById('header-user');
+    const avatarEl = document.getElementById('header-avatar');
+    const ddName   = document.getElementById('dd-user-name');
+    if (userEl)   userEl.textContent   = name;
+    if (avatarEl) avatarEl.textContent = name[0]?.toUpperCase() || '?';
+    if (ddName)   ddName.textContent   = name;
+  }
+
+  msgEl.style.color = 'var(--success)';
+  msgEl.textContent = '✓ Saved successfully';
+  setTimeout(() => { msgEl.textContent = ''; }, 3000);
+  document.getElementById('acct-new-pw').value    = '';
+  document.getElementById('acct-confirm-pw').value = '';
+}
+
+async function saveBusinessSettings() {
+  if (!canAccess('business')) return;
+  const msgEl = document.getElementById('acct-biz-msg');
+  msgEl.style.color = 'var(--danger)';
+
+  const updates = {
+    biz_name: document.getElementById('biz-name-input').value.trim(),
+    abn:      document.getElementById('biz-abn-input').value.trim(),
+    address:  document.getElementById('biz-address-input').value.trim(),
+    phone:    document.getElementById('biz-phone-input').value.trim(),
+  };
+
+  const { error } = await _supabase.from('businesses').update(updates).eq('id', _businessId);
+  if (error) { msgEl.textContent = error.message; return; }
+
+  _businessProfile = { ..._businessProfile, ...updates };
+  const nameEl = document.getElementById('header-biz-name');
+  if (nameEl) nameEl.textContent = updates.biz_name || 'My Business';
+
+  msgEl.style.color = 'var(--success)';
+  msgEl.textContent = '✓ Business settings saved';
+  setTimeout(() => { msgEl.textContent = ''; }, 3000);
+}
+
+// ══════════════════════════════════════════════════════
+//  TEAM MANAGEMENT
+// ══════════════════════════════════════════════════════
+
+async function loadTeamList() {
+  const el = document.getElementById('team-list');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0;">Loading…</div>';
+
+  const { data, error } = await _supabase
+    .from('business_users')
+    .select('*')
+    .eq('business_id', _businessId)
+    .order('created_at');
+
+  if (error || !data?.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0;">No team members yet.</div>';
+    return;
+  }
+
+  el.innerHTML = data.map(u => `
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
+      <div class="avatar" style="width:32px;height:32px;font-size:12px;flex-shrink:0;">
+        ${(u.email?.[0] || '?').toUpperCase()}
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${u.email}</div>
+        <div style="font-size:11px;color:var(--text3);">
+          <span class="role-badge role-${u.role}">${roleName(u.role)}</span>
+          <span style="margin-left:6px;">${u.status === 'pending' ? '· Invite pending' : u.status === 'active' ? '· Active' : '· Revoked'}</span>
+        </div>
+      </div>
+      ${u.role !== 'owner' && canAccess('team') ? `
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger);flex-shrink:0;"
+          onclick="revokeTeamMember('${u.id}','${u.email}')">Remove</button>
+      ` : ''}
+    </div>
+  `).join('');
+}
+
+function openInviteTeamMember() {
+  document.getElementById('invite-team-form').style.display = 'block';
+  document.getElementById('invite-email').value = '';
+  document.getElementById('invite-link-result').style.display = 'none';
+}
+
+async function generateTeamInvite() {
+  const email = document.getElementById('invite-email').value.trim();
+  const role  = document.getElementById('invite-role').value;
+  const resEl = document.getElementById('invite-link-result');
+
+  if (!email) { toast('Please enter an email address'); return; }
+  if (!_businessId) return;
+
+  // Generate a token
+  const token   = crypto.randomUUID().replace(/-/g,'') + crypto.randomUUID().replace(/-/g,'');
+  const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { error } = await _supabase.from('business_users').upsert({
+    business_id:    _businessId,
+    email,
+    role,
+    invited_by:     _currentUser.id,
+    status:         'pending',
+    invite_token:   token,
+    invite_expires: expires,
+  }, { onConflict: 'business_id,email' });
+
+  if (error) { toast('Error: ' + error.message); return; }
+
+  const inviteUrl = `${window.location.origin}/app/?team_invite=${token}`;
+
+  resEl.style.display = 'block';
+  resEl.innerHTML = `
+    <div style="padding:12px 14px;background:rgba(56,161,105,.08);border-radius:8px;border:1px solid rgba(56,161,105,.2);">
+      <div style="font-weight:600;font-size:12px;color:var(--success);margin-bottom:8px;">✓ Invite created for ${email}</div>
+      <div style="font-size:11px;color:var(--text2);word-break:break-all;background:var(--bg);padding:8px;border-radius:6px;font-family:'DM Mono',monospace;">${inviteUrl}</div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="navigator.clipboard.writeText('${inviteUrl}').then(()=>toast('Link copied ✓'))">Copy Link</button>
+    </div>`;
+
+  loadTeamList();
+}
+
+async function revokeTeamMember(id, email) {
+  if (!confirm(`Remove ${email} from your team?`)) return;
+  const { error } = await _supabase.from('business_users').update({ status: 'revoked' }).eq('id', id);
+  if (error) { toast('Error: ' + error.message); return; }
+  toast(`${email} removed ✓`);
+  loadTeamList();
+}
+
+// Handle team invite token on page load
+async function handleTeamInviteToken() {
+  const params = new URLSearchParams(window.location.search);
+  const token  = params.get('team_invite');
+  if (!token || !_currentUser) return;
+
+  const { data: invite } = await _supabase
+    .from('business_users')
+    .select('*')
+    .eq('invite_token', token)
+    .eq('status', 'pending')
+    .maybeSingle();
+
+  if (!invite) { toast('Invalid or expired invite link'); return; }
+  if (new Date(invite.invite_expires) < new Date()) { toast('This invite has expired'); return; }
+
+  // Accept the invite
+  const { error } = await _supabase.from('business_users').update({
+    user_id:      _currentUser.id,
+    status:       'active',
+    accepted_at:  new Date().toISOString(),
+    invite_token: null,
+  }).eq('id', invite.id);
+
+  if (error) { toast('Error accepting invite: ' + error.message); return; }
+
+  // Clear the token from URL
+  window.history.replaceState({}, '', window.location.pathname);
+  toast('Welcome to the team! ✓');
+
+  // Reload to apply the new role
+  setTimeout(() => window.location.reload(), 1500);
+}
