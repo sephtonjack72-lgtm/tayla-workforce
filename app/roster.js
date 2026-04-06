@@ -387,25 +387,67 @@ function buildGanttDay(date, dayShifts, activeEmps) {
   `;
 }
 
-// ── Unassigned row ──────────────────────────────────
+// ── Refresh all unassigned rows for a date ───────────────────────────────────
+function refreshUnassignedRows(date) {
+  const body = document.getElementById(`gantt-body-${date}`);
+  if (!body) { renderGanttPanel(date); return; }
+
+  // Remove all existing unassigned rows
+  body.querySelectorAll('.gantt-row-unassigned').forEach(el => el.remove());
+
+  // Rebuild and insert before the first employee row
+  const unassigned = shifts.filter(s => s.date === date && !s.employee_id && s.status !== 'cancelled');
+  const html = buildUnassignedRow(date, unassigned);
+  const firstEmpRow = body.querySelector('.gantt-row:not(.gantt-row-unassigned)');
+  if (firstEmpRow) {
+    firstEmpRow.insertAdjacentHTML('beforebegin', html);
+  } else {
+    body.insertAdjacentHTML('beforeend', html);
+  }
+}
+
+// ── Unassigned rows — one row per unassigned shift ──────────────────────────
 function buildUnassignedRow(date, unassignedShifts) {
-  const hasShifts = unassignedShifts.length > 0;
-  return `
-    <div class="gantt-row gantt-row-unassigned" id="gantt-row-unassigned-${date}">
-      <div class="gantt-emp-col gantt-emp-unassigned">
-        <div class="unassigned-icon">?</div>
-        <div style="min-width:0;">
-          <div style="font-weight:600;font-size:12px;color:var(--text2);">Unassigned</div>
-          <div style="font-size:10px;color:var(--text3);">${hasShifts ? `${unassignedShifts.length} shift${unassignedShifts.length>1?'s':''} · click to assign` : 'Drag here to add'}</div>
+  if (!unassignedShifts.length) {
+    // Empty placeholder row so there's always somewhere to drag
+    return `
+      <div class="gantt-row gantt-row-unassigned" id="gantt-row-unassigned-${date}">
+        <div class="gantt-emp-col gantt-emp-unassigned">
+          <div class="unassigned-icon">?</div>
+          <div style="min-width:0;">
+            <div style="font-weight:600;font-size:12px;color:var(--text2);">Unassigned</div>
+            <div style="font-size:10px;color:var(--text3);">Drag here or click + Add Shift</div>
+          </div>
         </div>
-      </div>
-      <div class="gantt-track gantt-track-unassigned" data-emp="" data-date="${date}"
-        onmousedown="onTrackMouseDown(event,'','${date}')"
-        onclick="onTrackClick(event,'','${date}')">
-        ${unassignedShifts.map(s => buildUnassignedBar(s)).join('')}
-      </div>
-    </div>
-  `;
+        <div class="gantt-track gantt-track-unassigned" data-emp="" data-date="${date}"
+          onmousedown="onTrackMouseDown(event,'','${date}')"
+          onclick="onTrackClick(event,'','${date}')">
+        </div>
+      </div>`;
+  }
+
+  // One row per unassigned shift — first row gets the "Unassigned" label
+  return unassignedShifts.map((shift, i) => {
+    const isFirst = i === 0;
+    const rowId   = isFirst ? `gantt-row-unassigned-${date}` : `gantt-row-unassigned-${date}-${shift.id}`;
+    return `
+      <div class="gantt-row gantt-row-unassigned" id="${rowId}">
+        <div class="gantt-emp-col gantt-emp-unassigned">
+          ${isFirst ? `
+            <div class="unassigned-icon">?</div>
+            <div style="min-width:0;">
+              <div style="font-weight:600;font-size:12px;color:var(--text2);">Unassigned</div>
+              <div style="font-size:10px;color:var(--text3);">Click shift to assign</div>
+            </div>
+          ` : `<div style="flex:1;border-left:2px dashed var(--border);margin-left:13px;height:100%;min-height:36px;"></div>`}
+        </div>
+        <div class="gantt-track gantt-track-unassigned" data-emp="" data-date="${date}"
+          onmousedown="onTrackMouseDown(event,'','${date}')"
+          onclick="onTrackClick(event,'','${date}')">
+          ${buildUnassignedBar(shift)}
+        </div>
+      </div>`;
+  }).join('');
 }
 
 function buildUnassignedBar(shift) {
@@ -684,7 +726,7 @@ async function assignShift(shiftId, empId) {
   const unassignedRowEl = document.getElementById(`gantt-row-unassigned-${shift.date}`);
   if (unassignedRowEl) {
     const unassigned = shifts.filter(s => s.date === shift.date && !s.employee_id && s.status !== 'cancelled');
-    unassignedRowEl.outerHTML = buildUnassignedRow(shift.date, unassigned);
+    refreshUnassignedRows(shift.date);
   }
 
   // Refresh old employee row if reassigning
@@ -728,7 +770,7 @@ async function deleteUnassignedShift(shiftId) {
       const rowEl = document.getElementById(`gantt-row-unassigned-${date}`);
       if (rowEl) {
         const unassigned = shifts.filter(s => s.date === date && !s.employee_id && s.status !== 'cancelled');
-        rowEl.outerHTML = buildUnassignedRow(date, unassigned);
+        refreshUnassignedRows(date);
       }
     }
     refreshDayHeading(date);
@@ -946,7 +988,7 @@ function refreshGanttRow(shiftId) {
     const rowEl = document.getElementById(`gantt-row-unassigned-${shift.date}`);
     if (rowEl) {
       const unassigned = shifts.filter(s => s.date === shift.date && !s.employee_id && s.status !== 'cancelled');
-      rowEl.outerHTML = buildUnassignedRow(shift.date, unassigned);
+      refreshUnassignedRows(shift.date);
     }
   } else {
     // With one-row-per-shift, remove ALL rows for this employee on this date
@@ -1031,14 +1073,8 @@ async function openAddShift(employeeId, date, startTime, endTime) {
     };
     await dbSaveShift(shift);
 
-    // Refresh unassigned row (or full panel if row doesn't exist yet)
-    const unassignedRowEl = document.getElementById(`gantt-row-unassigned-${targetDate}`);
-    if (unassignedRowEl) {
-      const unassigned = shifts.filter(s => s.date === targetDate && !s.employee_id && s.status !== 'cancelled');
-      unassignedRowEl.outerHTML = buildUnassignedRow(targetDate, unassigned);
-    } else {
-      renderGanttPanel(targetDate);
-    }
+    // Remove all existing unassigned rows for this date and rebuild them
+    refreshUnassignedRows(targetDate);
 
     renderDayTabs(getWeekDates(_currentWeekStart));
     renderRosterKPIs(getWeekDates(_currentWeekStart));
@@ -1167,7 +1203,7 @@ async function deleteShiftConfirm() {
       const rowEl = document.getElementById(`gantt-row-unassigned-${date}`);
       if (rowEl) {
         const unassigned = shifts.filter(s => s.date === date && !s.employee_id && s.status !== 'cancelled');
-        rowEl.outerHTML = buildUnassignedRow(date, unassigned);
+        refreshUnassignedRows(date);
       }
     }
     refreshDayHeading(date);
