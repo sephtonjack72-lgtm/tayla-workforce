@@ -275,7 +275,7 @@ function renderGanttPanel(date) {
       <div>
         <div style="font-family:'DM Serif Display',serif;font-size:22px;line-height:1.1;">
           ${DAY_LONG[dayIdx] || '—'}
-          ${isPH ? '<span style="font-size:11px;background:#fde2e2;color:var(--danger);padding:3px 9px;border-radius:99px;margin-left:8px;font-family:\'DM Sans\',sans-serif;">Public Holiday 250%</span>' : ''}
+          ${isPH ? `<span style="font-size:11px;background:#fde2e2;color:var(--danger);padding:3px 9px;border-radius:99px;margin-left:8px;font-family:'DM Sans',sans-serif;">Public Holiday ${Math.round(getPenaltyMultiplier('publicHoliday','permanent')*100)}%</span>` : ''}
           ${unassignedCount ? `<span style="font-size:11px;background:#fff3cd;color:#856404;padding:3px 9px;border-radius:99px;margin-left:8px;font-family:'DM Sans',sans-serif;">⚠ ${unassignedCount} unassigned</span>` : ''}
         </div>
         <div style="font-size:12px;color:var(--text3);margin-top:2px;">${d.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
@@ -1153,7 +1153,7 @@ function updateShiftPreview() {
         ${pay.laundryAllowance>0?`<span>Laundry</span><span class="mono">${fmt(pay.laundryAllowance)}</span>`:''}
         <span style="font-weight:700;color:var(--text);">Estimated pay</span><span class="mono" style="font-weight:700;font-size:14px;">${fmt(pay.totalPay)}</span>
       </div>
-      ${isPublicHoliday(date)?'<div style="color:var(--danger);margin-top:8px;font-size:11px;">🎉 Public holiday — 250% applies</div>':''}
+      ${isPublicHoliday(date)?`<div style="color:var(--danger);margin-top:8px;font-size:11px;">🎉 Public holiday — ${Math.round(getPenaltyMultiplier('publicHoliday','permanent')*100)}% applies</div>`:''}
     </div>`;
 }
 
