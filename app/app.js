@@ -441,7 +441,7 @@ function openAccountSettings(tab = 'profile') {
   document.getElementById('biz-phone-input').value   = _businessProfile?.phone      || '';
 
   switchAcctTab(tab);
-  openModal('account-modal');
+  document.getElementById('account-modal')?.classList.add('show');
   if (tab === 'team') loadTeamList();
 }
 
