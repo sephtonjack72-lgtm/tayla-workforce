@@ -154,11 +154,13 @@ async function afterLogin() {
   const params = new URLSearchParams(window.location.search);
   const teamToken = params.get('team_invite');
 
-  // First check if they own a business
-  const { data: ownedBiz } = await _supabase
+  // First check if they own a business — get the root business (no parent)
+  const { data: ownedBizList } = await _supabase
     .from('businesses').select('*')
     .eq('user_id', _currentUser.id)
-    .maybeSingle();
+    .is('parent_business_id', null);
+
+  const ownedBiz = ownedBizList?.[0] || null;
 
   if (ownedBiz) {
     _businessProfile = ownedBiz;
