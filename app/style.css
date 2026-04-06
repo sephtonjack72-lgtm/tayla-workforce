@@ -1428,3 +1428,41 @@ tr:hover td { background: var(--surface2); }
   gap: 5px;
   margin-bottom: 14px;
 }
+
+/* ══════════════════════════════════════════════════════
+   Dropdown colour fixes — dark theme
+══════════════════════════════════════════════════════ */
+
+/* Account dropdown */
+#user-dropdown {
+  background: #1e2235 !important;
+  border-color: rgba(255,255,255,.1) !important;
+}
+#user-dropdown .dd-item {
+  color: #e2e8f0 !important;
+}
+#user-dropdown .dd-item:hover {
+  background: rgba(255,255,255,.08) !important;
+}
+#dd-user-name  { color: #fff !important; }
+#dd-user-email { color: rgba(255,255,255,.5) !important; }
+#dd-role-badge { }
+#user-dropdown > div:first-child {
+  background: rgba(255,255,255,.05) !important;
+  border-bottom-color: rgba(255,255,255,.1) !important;
+}
+#user-dropdown > div:last-child {
+  border-top-color: rgba(255,255,255,.1) !important;
+}
+
+/* Franchise switcher select */
+#franchise-select {
+  background: rgba(255,255,255,.12) !important;
+  color: #fff !important;
+  border-color: rgba(255,255,255,.25) !important;
+  font-weight: 600;
+}
+#franchise-select option {
+  background: #1e2235;
+  color: #e2e8f0;
+}
