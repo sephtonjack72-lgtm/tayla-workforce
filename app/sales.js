@@ -12,6 +12,34 @@ let salesData = JSON.parse(localStorage.getItem('wf_sales') || '{}');
 
 async function dbLoadSalesRange(from, to) {
   if (!_businessId) return;
+
+  // For owner at Head Office — aggregate sales across all franchises
+  const isHeadOffice = _userRole === 'owner' && _businessId === _ownerBusinessId && _franchises?.length > 0;
+
+  if (isHeadOffice) {
+    const allBizIds = [_ownerBusinessId, ..._franchises.map(f => f.id)].filter(Boolean);
+    const { data, error } = await _supabase
+      .from('sales_data').select('*')
+      .in('business_id', allBizIds)
+      .gte('date', from).lte('date', to);
+    if (error) { console.error('Load sales failed:', error); return; }
+
+    // Aggregate by date — sum across all franchises
+    salesData = {};
+    (data || []).forEach(r => {
+      if (!salesData[r.date]) salesData[r.date] = { projected: 0, actual: 0, target_spch: null };
+      salesData[r.date].projected = (salesData[r.date].projected || 0) + (r.projected || 0);
+      salesData[r.date].actual    = (salesData[r.date].actual    || 0) + (r.actual    || 0);
+      // Use average target_spch across franchises
+      if (r.target_spch) {
+        salesData[r.date].target_spch = r.target_spch;
+      }
+    });
+    localStorage.setItem('wf_sales', JSON.stringify(salesData));
+    return;
+  }
+
+  // Normal single-business load
   const { data, error } = await _supabase
     .from('sales_data').select('*')
     .eq('business_id', _businessId)
@@ -88,22 +116,21 @@ function getSalesSummary(date) {
 //  STATE
 // ══════════════════════════════════════════════════════
 
-// Initialised lazily on first renderSales call so getWeekStart is available
-let _salesWeekStart = null;
-let _activeSalesDay = null;
+let _salesWeekStart = getWeekStart(new Date().toISOString().split('T')[0]);
+let _activeSalesDay = new Date().toISOString().split('T')[0];
 
 function salesWeekNav(dir) {
-  if (!_salesWeekStart) { renderSales(); return; }
-  const d = parseLocalDate(_salesWeekStart);
+  const d = new Date(_salesWeekStart);
   d.setDate(d.getDate() + dir * 7);
-  _salesWeekStart = localDateStr(d);
+  _salesWeekStart = d.toISOString().split('T')[0];
   const weekDates = getWeekDates(_salesWeekStart);
-  _activeSalesDay = weekDates[0];
+  if (!weekDates.includes(_activeSalesDay)) _activeSalesDay = weekDates[0];
   renderSales();
 }
+
 function goToCurrentSalesWeek() {
-  _salesWeekStart = getWeekStart(localDateStr(new Date()));
-  _activeSalesDay = localDateStr(new Date());
+  _salesWeekStart = getWeekStart(new Date().toISOString().split('T')[0]);
+  _activeSalesDay = new Date().toISOString().split('T')[0];
   renderSales();
 }
 
@@ -120,12 +147,6 @@ function switchSalesDay(date) {
 // ══════════════════════════════════════════════════════
 
 function renderSales() {
-  // Lazy init — getWeekStart lives in roster.js which loads after sales.js
-  if (!_salesWeekStart) {
-    _salesWeekStart = getWeekStart(localDateStr(new Date()));
-    _activeSalesDay = localDateStr(new Date());
-  }
-
   const weekDates = getWeekDates(_salesWeekStart);
   const weekEnd   = weekDates[6];
 
@@ -135,7 +156,7 @@ function renderSales() {
   // Update week label
   const label = document.getElementById('sales-week-label');
   if (label) {
-    const s = parseLocalDate(_salesWeekStart), e = parseLocalDate(weekEnd);
+    const s = new Date(_salesWeekStart), e = new Date(weekEnd);
     label.textContent = `${s.toLocaleDateString('en-AU',{day:'numeric',month:'short'})} — ${e.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}`;
   }
 
@@ -186,14 +207,14 @@ const SALES_DAY_SHORT = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 function renderSalesDayTabs(weekDates) {
   const container = document.getElementById('sales-day-tabs');
   if (!container) return;
-  const today = localDateStr(new Date());
+  const today = new Date().toISOString().split('T')[0];
 
   container.innerHTML = weekDates.map((date, i) => {
     const isActive = date === _activeSalesDay;
     const isToday  = date === today;
     const isPH     = isPublicHoliday(date);
     const sd       = salesData[date] || {};
-    const d        = parseLocalDate(date);
+    const d        = new Date(date);
     const hasProj  = sd.projected != null;
     const crewHours = getDayCrewHours(date);
     const spch = calcSpch(sd.projected, crewHours);
@@ -227,11 +248,13 @@ function renderSalesDayPanel(date) {
   const panel = document.getElementById('sales-day-panel');
   if (!panel) return;
 
+  const isHeadOfficeAgg = _userRole === 'owner' && _businessId === _ownerBusinessId && _franchises?.length > 0;
+
   const sd         = salesData[date] || {};
   const weekDates  = getWeekDates(_salesWeekStart);
   const dayIdx     = weekDates.indexOf(date);
-  const d          = parseLocalDate(date);
-  const today      = localDateStr(new Date());
+  const d          = new Date(date);
+  const today      = new Date().toISOString().split('T')[0];
   const isPast     = date < today;
   const isToday    = date === today;
   const isPH       = isPublicHoliday(date);
@@ -254,10 +277,10 @@ function renderSalesDayPanel(date) {
         </div>
         <div style="font-size:12px;color:var(--text3);margin-top:2px;">${d.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
       </div>
-      <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
         <div class="gantt-stat">
           <div class="gantt-stat-label">Projection</div>
-          <div class="gantt-stat-value" id="spanel-proj" style="color:var(--text);">${proj ? fmt(proj) : '—'}</div>
+          <div class="gantt-stat-value" id="spanel-proj">${proj ? fmt(proj) : '—'}</div>
         </div>
         <div class="gantt-stat">
           <div class="gantt-stat-label">SPCH</div>
@@ -265,7 +288,7 @@ function renderSalesDayPanel(date) {
         </div>
         <div class="gantt-stat">
           <div class="gantt-stat-label">Labour %</div>
-          <div class="gantt-stat-value" id="spanel-labour" style="color:${labourPct ? parseFloat(labourPct)<32?'var(--success)':'var(--warning)' : 'var(--text3)'};">${labourPct ? labourPct+'%' : '—'}</div>
+          <div class="gantt-stat-value" id="spanel-labour" style="color:${labourPct?parseFloat(labourPct)<32?'var(--success)':'var(--warning)':'var(--text3)'};">${labourPct ? labourPct+'%' : '—'}</div>
         </div>
       </div>
     </div>
@@ -468,6 +491,11 @@ function liveSalesPanelUpdate(date) {
 // ══════════════════════════════════════════════════════
 
 async function saveSalesField(date, field, value) {
+  // Head office shows aggregated data — not editable
+  if (_userRole === 'owner' && _businessId === _ownerBusinessId && _franchises?.length > 0) {
+    toast('Head Office shows combined franchise data — edit sales in each franchise directly');
+    return;
+  }
   if (!salesData[date]) salesData[date] = {};
   salesData[date][field] = value === '' ? null : parseFloat(value) || null;
   localStorage.setItem('wf_sales', JSON.stringify(salesData));
