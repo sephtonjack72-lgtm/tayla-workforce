@@ -618,12 +618,15 @@ function openAccountSettings(tab = 'profile') {
   document.getElementById('acct-profile-msg').textContent = '';
 
   // Populate business tab
-  document.getElementById('biz-name-input').value         = _businessProfile?.biz_name   || '';
-  document.getElementById('biz-abn-input').value          = _businessProfile?.abn        || '';
-  document.getElementById('biz-address-input').value      = _businessProfile?.address    || '';
-  document.getElementById('biz-phone-input').value        = _businessProfile?.phone      || '';
-  document.getElementById('biz-bsb-input').value          = _businessProfile?.bank_bsb   || '';
-  document.getElementById('biz-bank-account-input').value = _businessProfile?.bank_account || '';
+  document.getElementById('biz-name-input').value         = _businessProfile?.biz_name      || '';
+  document.getElementById('biz-abn-input').value          = _businessProfile?.abn            || '';
+  document.getElementById('biz-address-street-input').value  = _businessProfile?.address_street  || '';
+  document.getElementById('biz-address-suburb-input').value  = _businessProfile?.address_suburb  || '';
+  document.getElementById('biz-address-state-input').value   = _businessProfile?.address_state   || '';
+  document.getElementById('biz-address-postcode-input').value = _businessProfile?.address_postcode || '';
+  document.getElementById('biz-phone-input').value        = _businessProfile?.phone          || '';
+  document.getElementById('biz-bsb-input').value          = _businessProfile?.bank_bsb       || '';
+  document.getElementById('biz-bank-account-input').value = _businessProfile?.bank_account   || '';
 
   switchAcctTab(tab);
   document.getElementById('account-modal')?.classList.add('show');
@@ -691,12 +694,15 @@ async function saveBusinessSettings() {
   msgEl.style.color = 'var(--danger)';
 
   const updates = {
-    biz_name:     document.getElementById('biz-name-input').value.trim(),
-    abn:          document.getElementById('biz-abn-input').value.trim(),
-    address:      document.getElementById('biz-address-input').value.trim(),
-    phone:        document.getElementById('biz-phone-input').value.trim(),
-    bank_bsb:     document.getElementById('biz-bsb-input').value.trim(),
-    bank_account: document.getElementById('biz-bank-account-input').value.trim(),
+    biz_name:          document.getElementById('biz-name-input').value.trim(),
+    abn:               document.getElementById('biz-abn-input').value.trim(),
+    address_street:    document.getElementById('biz-address-street-input').value.trim(),
+    address_suburb:    document.getElementById('biz-address-suburb-input').value.trim(),
+    address_state:     document.getElementById('biz-address-state-input').value.trim(),
+    address_postcode:  document.getElementById('biz-address-postcode-input').value.trim(),
+    phone:             document.getElementById('biz-phone-input').value.trim(),
+    bank_bsb:          document.getElementById('biz-bsb-input').value.trim(),
+    bank_account:      document.getElementById('biz-bank-account-input').value.trim(),
   };
 
   const { error } = await _supabase.from('businesses').update(updates).eq('id', _businessId);
@@ -1060,6 +1066,94 @@ async function getBillingStatus() {
   return status;
 }
 
+// ══════════════════════════════════════════════════════
+//  SUPER PAYMENT AUDIT TRAIL
+//  Records when SuperStream files are exported
+//  Provides proof of compliance for Payday Super (July 2026)
+// ══════════════════════════════════════════════════════
+
+async function recordSuperPayment(weekStart, weekEnd, totalAmount, empCount) {
+  if (!_businessId) return;
+  await _supabase.from('super_payments').insert({
+    business_id:      _businessId,
+    pay_period_start: weekStart,
+    pay_period_end:   weekEnd,
+    payment_date:     localDateStr(new Date()),
+    total_amount:     totalAmount,
+    employee_count:   empCount,
+    status:           'exported',
+    exported_at:      new Date().toISOString(),
+  });
+}
+
+async function markSuperSubmitted(paymentId) {
+  await _supabase.from('super_payments')
+    .update({ status: 'submitted', submitted_at: new Date().toISOString() })
+    .eq('id', paymentId);
+  toast('Super marked as submitted ✓');
+  loadSuperPaymentHistory();
+}
+
+async function loadSuperPaymentHistory() {
+  const el = document.getElementById('super-payment-history');
+  if (!el) return;
+
+  const { data } = await _supabase
+    .from('super_payments')
+    .select('*')
+    .eq('business_id', _businessId)
+    .order('pay_period_end', { ascending: false })
+    .limit(20);
+
+  if (!data?.length) {
+    el.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text3);font-size:13px;">No super payments recorded yet.</div>';
+    return;
+  }
+
+  // Check for any overdue (>7 days since pay period end, not submitted)
+  const today = new Date();
+  el.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Pay Period</th>
+          <th style="text-align:right;">Employees</th>
+          <th style="text-align:right;">Total Super</th>
+          <th>Due Date</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${data.map(p => {
+          const dueDate = new Date(p.pay_period_end);
+          dueDate.setDate(dueDate.getDate() + 7);
+          const isOverdue = p.status !== 'submitted' && today > dueDate;
+          const dueDateStr = dueDate.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+          const statusBadge = p.status === 'submitted'
+            ? '<span class="badge badge-green">Submitted</span>'
+            : isOverdue
+              ? '<span class="badge badge-red">Overdue</span>'
+              : '<span class="badge badge-yellow">Exported</span>';
+          return `
+            <tr>
+              <td class="mono" style="font-size:12px;">${p.pay_period_start} → ${p.pay_period_end}</td>
+              <td style="text-align:right;">${p.employee_count}</td>
+              <td style="text-align:right;" class="mono">${fmt(p.total_amount)}</td>
+              <td style="font-size:12px;${isOverdue ? 'color:var(--danger);font-weight:600;' : ''}">${dueDateStr}</td>
+              <td>${statusBadge}</td>
+              <td>
+                ${p.status !== 'submitted' ? `
+                  <button class="btn btn-ghost btn-sm" onclick="markSuperSubmitted('${p.id}')">Mark Submitted</button>
+                ` : ''}
+              </td>
+            </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
 async function loadBillingPanel() {
   if (_userRole !== 'owner') return;
 
@@ -1295,8 +1389,11 @@ async function loadFranchiseAnalyticsData() {
   // When switched to a franchise, or franchise user — show only current business
   let allBizIds, bizMap;
   if (_userRole === 'owner' && _businessId === _ownerBusinessId) {
-    allBizIds = _franchises.map(f => f.id).filter(Boolean);
-    bizMap = _franchises.reduce((m, f) => ({ ...m, [f.id]: f.biz_name }), {});
+    allBizIds = [_ownerBusinessId, ..._franchises.map(f => f.id)].filter(Boolean);
+    bizMap = {
+      [_ownerBusinessId]: 'Head Office',
+      ..._franchises.reduce((m, f) => ({ ...m, [f.id]: f.biz_name }), {}),
+    };
   } else {
     allBizIds = [_businessId].filter(Boolean);
     bizMap = { [_businessId]: _businessProfile?.biz_name || 'My Business' };
@@ -1475,11 +1572,9 @@ function openSTP2Modal() {
   `;
 
   modal.classList.add('show');
+  // Load super payment history
+  if (typeof loadSuperPaymentHistory === 'function') loadSuperPaymentHistory();
 }
-
-// ══════════════════════════════════════════════════════
-//  LEAVE HELPERS
-// ══════════════════════════════════════════════════════
 
 function populateLeaveEmployeeSelect() {
   const sel = document.getElementById('leave-emp-select');
