@@ -148,8 +148,13 @@ function openEditEmployee(id) {
   document.getElementById('emp-start-date').value   = e.start_date || '';
   document.getElementById('emp-laundry').checked    = e.laundry_allowance || false;
   document.getElementById('emp-active').value       = String(e.active !== false);
-document.getElementById('emp-tax-free').value = String(e.tax_free_threshold !== false);
-document.getElementById('emp-residency').value = e.residency_status || 'australian';
+  document.getElementById('emp-tax-free').value     = String(e.tax_free_threshold !== false);
+  document.getElementById('emp-residency').value    = e.residency_status || 'australian';
+  // STP2 fields
+  document.getElementById('emp-dob').value              = e.date_of_birth       || '';
+  document.getElementById('emp-gender').value           = e.gender               || '';
+  document.getElementById('emp-termination-date').value = e.termination_date     || '';
+  document.getElementById('emp-salary-sacrifice').value = e.salary_sacrifice     || '';
   document.getElementById('emp-modal').classList.add('show');
 }
 
@@ -178,8 +183,13 @@ async function saveEmployee() {
     start_date:           document.getElementById('emp-start-date').value,
     laundry_allowance:    document.getElementById('emp-laundry').checked,
     active:               document.getElementById('emp-active').value === 'true',
-tax_free_threshold: document.getElementById('emp-tax-free').value === 'true',
-residency_status:   document.getElementById('emp-residency').value,
+    tax_free_threshold:   document.getElementById('emp-tax-free').value === 'true',
+    residency_status:     document.getElementById('emp-residency').value,
+    // STP2 fields
+    date_of_birth:        document.getElementById('emp-dob').value || null,
+    gender:               document.getElementById('emp-gender').value || null,
+    termination_date:     document.getElementById('emp-termination-date').value || null,
+    salary_sacrifice:     parseFloat(document.getElementById('emp-salary-sacrifice').value) || 0,
     created_at:           editId ? undefined : new Date().toISOString(),
   };
   if (!editId) delete emp.created_at;
