@@ -350,3 +350,222 @@ function showSTP2Readiness() {
   }
   modal.classList.add('show');
 }
+
+// ══════════════════════════════════════════════════════
+//  XERO PAYROLL CSV EXPORT
+//  Format: Xero Payroll Import CSV
+//  Xero → Payroll → Pay Runs → Import
+// ══════════════════════════════════════════════════════
+
+async function exportXeroCSV(weekStart, weekEnd) {
+  const btn = document.getElementById('xero-export-btn');
+  if (btn) { btn.textContent = 'Generating…'; btn.disabled = true; }
+
+  try {
+    const { data: payslipRows, error } = await _supabase
+      .from('payslips').select('*')
+      .eq('business_id', _businessId)
+      .gte('pay_period_start', weekStart)
+      .lte('pay_period_end', weekEnd);
+
+    if (error) throw new Error(error.message);
+    if (!payslipRows?.length) { toast('No payslips found for this period. Push payslips first.'); return; }
+
+    const paymentDate = weekEnd;
+    const rows = [];
+
+    // Xero Payroll CSV header
+    rows.push([
+      'Employee First Name',
+      'Employee Last Name',
+      'Date',
+      'Earnings Rate Name',
+      'Units',
+      'Amount',
+      'PAYG Withholding',
+      'Medicare Levy',
+      'Super Amount',
+      'Super Fund',
+      'Pay Period Start',
+      'Pay Period End',
+    ].join(','));
+
+    for (const row of payslipRows) {
+      const emp = employees.find(e => e.id === row.employee_id);
+      if (!emp) continue;
+
+      const lineItems = row.line_items || [];
+
+      // Ordinary time
+      const ordinaryHours = +(row.hours_worked || 0);
+      const overtimePay   = +(lineItems.filter(l => l.type === 'overtime').reduce((s, l) => s + (l.amount || 0), 0)).toFixed(2);
+      const ordinaryPay   = +((row.gross_pay || 0) - overtimePay).toFixed(2);
+
+      // Ordinary time row
+      rows.push([
+        `"${emp.first_name}"`,
+        `"${emp.last_name}"`,
+        paymentDate,
+        '"Ordinary Time"',
+        ordinaryHours.toFixed(2),
+        ordinaryPay.toFixed(2),
+        (row.tax_withheld || 0).toFixed(2),
+        (row.medicare_levy || 0).toFixed(2),
+        (row.super_amount || 0).toFixed(2),
+        `"${emp.super_fund || ''}"`,
+        weekStart,
+        weekEnd,
+      ].join(','));
+
+      // Overtime row (if any)
+      if (overtimePay > 0) {
+        const overtimeHours = +(lineItems.filter(l => l.type === 'overtime').reduce((s, l) => s + (l.hours || 0), 0)).toFixed(2);
+        rows.push([
+          `"${emp.first_name}"`,
+          `"${emp.last_name}"`,
+          paymentDate,
+          '"Overtime"',
+          overtimeHours.toFixed(2),
+          overtimePay.toFixed(2),
+          '0.00',
+          '0.00',
+          '0.00',
+          '""',
+          weekStart,
+          weekEnd,
+        ].join(','));
+      }
+
+      // Allowances row (if any)
+      if (row.allowances > 0) {
+        rows.push([
+          `"${emp.first_name}"`,
+          `"${emp.last_name}"`,
+          paymentDate,
+          '"Laundry Allowance"',
+          '1.00',
+          (row.allowances || 0).toFixed(2),
+          '0.00',
+          '0.00',
+          '0.00',
+          '""',
+          weekStart,
+          weekEnd,
+        ].join(','));
+      }
+    }
+
+    downloadCSV(rows.join('\n'), `Xero_Payroll_${_businessProfile?.biz_name?.replace(/\s+/g,'_')}_${weekStart}_${weekEnd}.csv`);
+    toast(`Xero CSV exported — ${payslipRows.length} employee${payslipRows.length !== 1 ? 's' : ''} ✓`);
+
+  } catch (err) {
+    toast('Error: ' + err.message);
+  } finally {
+    if (btn) { btn.textContent = '📊 Export for Xero'; btn.disabled = false; }
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  MYOB PAYROLL CSV EXPORT
+//  Format: MYOB AccountRight Payroll Import
+//  MYOB → Payroll → Process Payroll → Import
+// ══════════════════════════════════════════════════════
+
+async function exportMYOBCSV(weekStart, weekEnd) {
+  const btn = document.getElementById('myob-export-btn');
+  if (btn) { btn.textContent = 'Generating…'; btn.disabled = true; }
+
+  try {
+    const { data: payslipRows, error } = await _supabase
+      .from('payslips').select('*')
+      .eq('business_id', _businessId)
+      .gte('pay_period_start', weekStart)
+      .lte('pay_period_end', weekEnd);
+
+    if (error) throw new Error(error.message);
+    if (!payslipRows?.length) { toast('No payslips found for this period. Push payslips first.'); return; }
+
+    const rows = [];
+
+    // MYOB AccountRight Payroll CSV header
+    rows.push([
+      'Co./Last Name',
+      'First Name',
+      'Card ID',
+      'Pay Period Start Date',
+      'Pay Period End Date',
+      'Payment Date',
+      'Payroll Category',
+      'Hours',
+      'Amount',
+    ].join(','));
+
+    for (const row of payslipRows) {
+      const emp = employees.find(e => e.id === row.employee_id);
+      if (!emp) continue;
+
+      const cardId      = emp.id.slice(0, 8).toUpperCase();
+      const lineItems   = row.line_items || [];
+      const overtimePay = +(lineItems.filter(l => l.type === 'overtime').reduce((s, l) => s + (l.amount || 0), 0)).toFixed(2);
+      const ordinaryPay = +((row.gross_pay || 0) - overtimePay).toFixed(2);
+      const hoursWorked = +(row.hours_worked || 0);
+
+      const addRow = (category, hours, amount) => rows.push([
+        `"${emp.last_name}"`,
+        `"${emp.first_name}"`,
+        cardId,
+        weekStart,
+        weekEnd,
+        weekEnd,
+        `"${category}"`,
+        hours.toFixed(2),
+        amount.toFixed(2),
+      ].join(','));
+
+      // Ordinary time
+      addRow('Base Hourly', hoursWorked, ordinaryPay);
+
+      // Overtime
+      if (overtimePay > 0) {
+        const overtimeHours = +(lineItems.filter(l => l.type === 'overtime').reduce((s, l) => s + (l.hours || 0), 0)).toFixed(2);
+        addRow('Overtime', overtimeHours, overtimePay);
+      }
+
+      // Allowances
+      if (row.allowances > 0) {
+        addRow('Laundry Allowance', 0, row.allowances);
+      }
+
+      // PAYG withholding (negative — deduction)
+      if (row.tax_withheld > 0) {
+        addRow('PAYG Withholding', 0, -(row.tax_withheld + (row.medicare_levy || 0)));
+      }
+
+      // Superannuation
+      if (row.super_amount > 0) {
+        addRow('Superannuation', 0, row.super_amount);
+      }
+    }
+
+    downloadCSV(rows.join('\n'), `MYOB_Payroll_${_businessProfile?.biz_name?.replace(/\s+/g,'_')}_${weekStart}_${weekEnd}.csv`);
+    toast(`MYOB CSV exported — ${payslipRows.length} employee${payslipRows.length !== 1 ? 's' : ''} ✓`);
+
+  } catch (err) {
+    toast('Error: ' + err.message);
+  } finally {
+    if (btn) { btn.textContent = '📊 Export for MYOB'; btn.disabled = false; }
+  }
+}
+
+// ── Helper: download CSV file
+function downloadCSV(content, filename) {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
