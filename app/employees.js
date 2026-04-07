@@ -143,6 +143,7 @@ function openEditEmployee(id) {
   document.getElementById('emp-super-fund').value   = e.super_fund || '';
   document.getElementById('emp-super-usi').value    = e.super_fund_usi || '';
   document.getElementById('emp-super-number').value = e.super_member_number || '';
+  document.getElementById('emp-super-fund-abn').value = e.super_fund_abn || '';
   document.getElementById('emp-bank-bsb').value     = e.bank_bsb   || '';
   document.getElementById('emp-bank-account').value = e.bank_account || '';
   document.getElementById('emp-start-date').value   = e.start_date || '';
@@ -150,6 +151,7 @@ function openEditEmployee(id) {
   document.getElementById('emp-active').value       = String(e.active !== false);
   document.getElementById('emp-tax-free').value     = String(e.tax_free_threshold !== false);
   document.getElementById('emp-residency').value    = e.residency_status || 'australian';
+  document.getElementById('emp-hecs-help').value    = String(e.hecs_help || false);
   // STP2 fields
   document.getElementById('emp-dob').value              = e.date_of_birth       || '';
   document.getElementById('emp-gender').value           = e.gender               || '';
@@ -177,6 +179,7 @@ async function saveEmployee() {
     tfn:                  document.getElementById('emp-tfn').value.trim(),
     super_fund:           document.getElementById('emp-super-fund').value.trim(),
     super_fund_usi:       document.getElementById('emp-super-usi').value.trim(),
+    super_fund_abn:       document.getElementById('emp-super-fund-abn').value.trim(),
     super_member_number:  document.getElementById('emp-super-number').value.trim(),
     bank_bsb:             document.getElementById('emp-bank-bsb').value.trim(),
     bank_account:         document.getElementById('emp-bank-account').value.trim(),
@@ -185,6 +188,7 @@ async function saveEmployee() {
     active:               document.getElementById('emp-active').value === 'true',
     tax_free_threshold:   document.getElementById('emp-tax-free').value === 'true',
     residency_status:     document.getElementById('emp-residency').value,
+    hecs_help:            document.getElementById('emp-hecs-help').value === 'true',
     // STP2 fields
     date_of_birth:        document.getElementById('emp-dob').value || null,
     gender:               document.getElementById('emp-gender').value || null,
