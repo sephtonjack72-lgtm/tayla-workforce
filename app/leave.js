@@ -70,7 +70,7 @@ async function dbLoadLeaveRequests() {
   const { data, error } = await _supabase
     .from('leave_requests').select('*')
     .eq('business_id', _businessId)
-    .order('created_at', { ascending: false });
+    .order('start_date', { ascending: false });
   if (error) { console.error('Load leave requests failed:', error); return; }
   leaveRequests = data || [];
 }
@@ -324,7 +324,6 @@ async function saveLeaveRequest() {
     hours,
     notes,
     status:       'pending',
-    created_at:   new Date().toISOString(),
   });
 
   if (error) { toast('Error: ' + error.message); return; }
