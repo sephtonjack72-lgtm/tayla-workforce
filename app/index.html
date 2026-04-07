@@ -384,6 +384,20 @@
           <label>Start Date</label>
           <input type="date" id="emp-start-date">
         </div>
+        <div class="form-group">
+          <label>Date of Birth <span style="font-size:10px;color:var(--text3);font-weight:400;">STP2</span></label>
+          <input type="date" id="emp-dob">
+        </div>
+        <div class="form-group">
+          <label>Gender <span style="font-size:10px;color:var(--text3);font-weight:400;">STP2</span></label>
+          <select id="emp-gender">
+            <option value="">Not specified</option>
+            <option value="M">Male</option>
+            <option value="F">Female</option>
+            <option value="I">Intersex or indeterminate</option>
+            <option value="N">Not stated</option>
+          </select>
+        </div>
         <div class="form-group full">
           <label>Super Fund</label>
           <input type="text" id="emp-super-fund" placeholder="e.g. Australian Super">
@@ -395,6 +409,10 @@
         <div class="form-group">
           <label>Super Member Number</label>
           <input type="text" id="emp-super-number" placeholder="Member number">
+        </div>
+        <div class="form-group">
+          <label>Salary Sacrifice ($/wk) <span style="font-size:10px;color:var(--text3);font-weight:400;">STP2</span></label>
+          <input type="number" id="emp-salary-sacrifice" placeholder="0" min="0" step="1">
         </div>
         <div class="form-group">
           <label>Tax-Free Threshold</label>
@@ -410,6 +428,10 @@
             <option value="foreign">Foreign Resident</option>
             <option value="working_holiday">Working Holiday Maker</option>
           </select>
+        </div>
+        <div class="form-group">
+          <label>Termination Date <span style="font-size:10px;color:var(--text3);font-weight:400;">STP2 — if applicable</span></label>
+          <input type="date" id="emp-termination-date">
         </div>
         <div class="form-group">
           <label>Status</label>
