@@ -326,6 +326,9 @@ async function applyProfile(profile) {
   // Show billing banner if needed
   showBillingBanner();
 
+  // Populate leave employee select
+  populateLeaveEmployeeSelect();
+
   // Handle billing redirect params
   const billingParam = new URLSearchParams(window.location.search).get('billing');
   if (billingParam === 'success') {
@@ -432,6 +435,7 @@ function showPage(id) {
   if (id === 'sales')      renderSales();
   if (id === 'timesheets' && typeof renderTimesheetsFromMemory === 'function') renderTimesheetsFromMemory();
   if (id === 'awards'     && typeof initAwardPage              === 'function') initAwardPage();
+  if (id === 'leave'      && typeof initLeavePage              === 'function') initLeavePage();
 }
 
 // ══════════════════════════════════════════════════════
@@ -614,10 +618,12 @@ function openAccountSettings(tab = 'profile') {
   document.getElementById('acct-profile-msg').textContent = '';
 
   // Populate business tab
-  document.getElementById('biz-name-input').value    = _businessProfile?.biz_name   || '';
-  document.getElementById('biz-abn-input').value     = _businessProfile?.abn        || '';
-  document.getElementById('biz-address-input').value = _businessProfile?.address    || '';
-  document.getElementById('biz-phone-input').value   = _businessProfile?.phone      || '';
+  document.getElementById('biz-name-input').value         = _businessProfile?.biz_name   || '';
+  document.getElementById('biz-abn-input').value          = _businessProfile?.abn        || '';
+  document.getElementById('biz-address-input').value      = _businessProfile?.address    || '';
+  document.getElementById('biz-phone-input').value        = _businessProfile?.phone      || '';
+  document.getElementById('biz-bsb-input').value          = _businessProfile?.bank_bsb   || '';
+  document.getElementById('biz-bank-account-input').value = _businessProfile?.bank_account || '';
 
   switchAcctTab(tab);
   document.getElementById('account-modal')?.classList.add('show');
@@ -685,10 +691,12 @@ async function saveBusinessSettings() {
   msgEl.style.color = 'var(--danger)';
 
   const updates = {
-    biz_name: document.getElementById('biz-name-input').value.trim(),
-    abn:      document.getElementById('biz-abn-input').value.trim(),
-    address:  document.getElementById('biz-address-input').value.trim(),
-    phone:    document.getElementById('biz-phone-input').value.trim(),
+    biz_name:     document.getElementById('biz-name-input').value.trim(),
+    abn:          document.getElementById('biz-abn-input').value.trim(),
+    address:      document.getElementById('biz-address-input').value.trim(),
+    phone:        document.getElementById('biz-phone-input').value.trim(),
+    bank_bsb:     document.getElementById('biz-bsb-input').value.trim(),
+    bank_account: document.getElementById('biz-bank-account-input').value.trim(),
   };
 
   const { error } = await _supabase.from('businesses').update(updates).eq('id', _businessId);
@@ -1470,4 +1478,16 @@ function openSTP2Modal() {
   `;
 
   modal.classList.add('show');
+}
+
+// ══════════════════════════════════════════════════════
+//  LEAVE HELPERS
+// ══════════════════════════════════════════════════════
+
+function populateLeaveEmployeeSelect() {
+  const sel = document.getElementById('leave-emp-select');
+  if (!sel) return;
+  const eligible = employees.filter(e => e.active !== false && e.employment_type !== 'casual');
+  sel.innerHTML = '<option value="">Select employee…</option>' +
+    eligible.map(e => `<option value="${e.id}">${e.first_name} ${e.last_name}</option>`).join('');
 }
