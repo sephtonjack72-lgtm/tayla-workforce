@@ -890,7 +890,19 @@
       <button class="btn btn-ghost btn-sm" id="xero-export-btn" onclick="exportXeroCSV(_tsWeekStart, getWeekDates(_tsWeekStart)[6])">📊 Export for Xero</button>
       <button class="btn btn-ghost btn-sm" id="myob-export-btn" onclick="exportMYOBCSV(_tsWeekStart, getWeekDates(_tsWeekStart)[6])">📊 Export for MYOB</button>
       <button class="btn btn-ghost btn-sm" id="aba-export-btn" onclick="exportABAFile(_tsWeekStart, getWeekDates(_tsWeekStart)[6])">🏦 Export ABA File</button>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('stp2-modal').classList.remove('show');showSuperStreamModal(_tsWeekStart, getWeekDates(_tsWeekStart)[6])">⚡ Submit Super</button>
     </div>
+  </div>
+</div>
+
+<!-- SuperStream Modal -->
+<div class="modal-overlay" id="superstream-modal">
+  <div class="modal" style="max-width:540px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h3 style="margin:0;">⚡ Submit Super</h3>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('superstream-modal').classList.remove('show')">✕</button>
+    </div>
+    <div id="superstream-summary"></div>
   </div>
 </div>
 
