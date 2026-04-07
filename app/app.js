@@ -1389,11 +1389,8 @@ async function loadFranchiseAnalyticsData() {
   // When switched to a franchise, or franchise user — show only current business
   let allBizIds, bizMap;
   if (_userRole === 'owner' && _businessId === _ownerBusinessId) {
-    allBizIds = [_ownerBusinessId, ..._franchises.map(f => f.id)].filter(Boolean);
-    bizMap = {
-      [_ownerBusinessId]: 'Head Office',
-      ..._franchises.reduce((m, f) => ({ ...m, [f.id]: f.biz_name }), {}),
-    };
+    allBizIds = _franchises.map(f => f.id).filter(Boolean);
+    bizMap = _franchises.reduce((m, f) => ({ ...m, [f.id]: f.biz_name }), {});
   } else {
     allBizIds = [_businessId].filter(Boolean);
     bizMap = { [_businessId]: _businessProfile?.biz_name || 'My Business' };
