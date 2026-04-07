@@ -759,7 +759,9 @@
     <div id="stp2-summary"></div>
     <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;">
       <button class="btn btn-ghost btn-sm" onclick="showSTP2Readiness()">Check Employee Readiness</button>
-      <button class="btn btn-primary btn-sm" id="stp2-generate-btn" onclick="generateSTP2Report(_tsWeekStart, getWeekDates(_tsWeekStart)[6])">📤 Generate & Download</button>
+      <button class="btn btn-primary btn-sm" id="stp2-generate-btn" onclick="generateSTP2Report(_tsWeekStart, getWeekDates(_tsWeekStart)[6])">📤 Export STP2</button>
+      <button class="btn btn-ghost btn-sm" id="xero-export-btn" onclick="exportXeroCSV(_tsWeekStart, getWeekDates(_tsWeekStart)[6])">📊 Export for Xero</button>
+      <button class="btn btn-ghost btn-sm" id="myob-export-btn" onclick="exportMYOBCSV(_tsWeekStart, getWeekDates(_tsWeekStart)[6])">📊 Export for MYOB</button>
     </div>
   </div>
 </div>
