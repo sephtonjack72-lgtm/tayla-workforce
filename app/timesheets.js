@@ -406,7 +406,8 @@ async function executePushPayslips() {
       const totalGross   = +(grossPay + laundryAllow).toFixed(2);
       const paygWithheld = calcPAYG(totalGross, emp.tax_free_threshold !== false, emp.residency_status || 'australian');
       const medicare     = calcMedicare(totalGross, emp.residency_status || 'australian');
-      const totalTax     = paygWithheld + medicare;
+      const hecsRepay    = emp.hecs_help ? calcHECSRepayment(totalGross) : 0;
+      const totalTax     = paygWithheld + medicare + hecsRepay;
       const superAmount  = calcSuper(grossPay);
       const netPay       = +(totalGross - totalTax).toFixed(2);
 
@@ -421,6 +422,7 @@ async function executePushPayslips() {
       const ytdTax   = +((priorPayslips||[]).reduce((s,r) => s+(r.tax_withheld||0), 0) + paygWithheld).toFixed(2);
       const ytdSuper = +((priorPayslips||[]).reduce((s,r) => s+(r.super_amount||0), 0) + superAmount).toFixed(2);
       const ytdAllow = +((priorPayslips||[]).reduce((s,r) => s+(r.allowances||0), 0) + laundryAllow).toFixed(2);
+      const ytdHecs  = +((priorPayslips||[]).reduce((s,r) => s+(r.hecs_repayment||0), 0) + hecsRepay).toFixed(2);
       const hoursWorked = +shiftBreakdown.reduce((s,r) => s+(r.pay?.workedHours||0), 0).toFixed(2);
 
       // Save payslip record with full STP2 fields
@@ -432,6 +434,7 @@ async function executePushPayslips() {
         gross_pay:        totalGross,
         tax_withheld:     paygWithheld,
         medicare_levy:    medicare,
+        hecs_repayment:   hecsRepay,
         super_amount:     superAmount,
         net_pay:          netPay,
         allowances:       laundryAllow,
@@ -440,6 +443,7 @@ async function executePushPayslips() {
         ytd_tax:          ytdTax,
         ytd_super:        ytdSuper,
         ytd_allowances:   ytdAllow,
+        ytd_hecs:         ytdHecs,
         pay_event_type:   'PAYEVNT',
         status:           'draft',
       }, { onConflict: 'business_id,employee_id,pay_period_start' });
