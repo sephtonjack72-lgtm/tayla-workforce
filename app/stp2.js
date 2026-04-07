@@ -718,3 +718,253 @@ async function exportABAFile(weekStart, weekEnd) {
     if (btn) { btn.textContent = '🏦 Export ABA File'; btn.disabled = false; }
   }
 }
+
+// ══════════════════════════════════════════════════════
+//  SUPERSTREAM SAFF CSV EXPORT
+//  SuperStream Alternative File Format (SAFF)
+//  Compatible with: SBSCH (ATO), AMP, Rest, Hostplus,
+//  and all major clearing houses
+//
+//  Payday Super (July 2026): super must be paid within
+//  7 days of each pay day — export per pay run.
+//
+//  Reference: ATO SuperStream SAFF specification
+//  ato.gov.au/businesses/super-for-employers/superstream
+// ══════════════════════════════════════════════════════
+
+async function exportSuperStream(weekStart, weekEnd) {
+  const btn = document.getElementById('superstream-export-btn');
+  if (btn) { btn.textContent = 'Generating…'; btn.disabled = true; }
+
+  try {
+    const { data: payslipRows, error } = await _supabase
+      .from('payslips').select('*')
+      .eq('business_id', _businessId)
+      .gte('pay_period_start', weekStart)
+      .lte('pay_period_end', weekEnd);
+
+    if (error) throw new Error(error.message);
+    if (!payslipRows?.length) {
+      toast('No payslips found for this period. Push payslips first.');
+      return;
+    }
+
+    // Validate business details
+    const bizAbn  = (_businessProfile?.abn  || '').replace(/\s/g, '');
+    const bizName = _businessProfile?.biz_name || '';
+    if (!bizAbn) {
+      toast('⚠ Add your business ABN in Business Settings before exporting SuperStream.');
+      return;
+    }
+
+    // Check employees have required super details
+    const missing = [];
+    for (const row of payslipRows) {
+      if (!row.super_amount || row.super_amount <= 0) continue;
+      const emp = employees.find(e => e.id === row.employee_id);
+      if (!emp) continue;
+      const empMissing = [];
+      if (!emp.super_fund)          empMissing.push('fund name');
+      if (!emp.super_fund_usi)      empMissing.push('USI');
+      if (!emp.super_member_number) empMissing.push('member number');
+      if (!emp.tfn)                 empMissing.push('TFN');
+      if (empMissing.length) missing.push(`${emp.first_name} ${emp.last_name} (missing: ${empMissing.join(', ')})`);
+    }
+    if (missing.length) {
+      toast(`⚠ Missing super details for: ${missing.slice(0, 2).join('; ')}${missing.length > 2 ? ` and ${missing.length - 2} more` : ''}. Fix in Employees first.`);
+      return;
+    }
+
+    // Payment date — 7 days after pay period end (Payday Super compliance)
+    const payDateObj = new Date(weekEnd);
+    payDateObj.setDate(payDateObj.getDate() + 7);
+    const paymentDate = localDateStr(payDateObj);
+
+    // SAFF CSV header — ATO SuperStream Alternative File Format
+    const headers = [
+      'YourFileReference',
+      'YourEntityIdentifier',
+      'TargetProductId',
+      'ABN',
+      'USI',
+      'SPIN',
+      'FundName',
+      'MemberClientIdentifier',
+      'PayrollNumber',
+      'TFN',
+      'MemberEntityIdentifier',
+      'FamilyName',
+      'GivenName',
+      'OtherGivenName',
+      'DateOfBirth',
+      'Gender',
+      'PhoneNumber',
+      'EmailAddress',
+      'AddressLine1',
+      'AddressLine2',
+      'Suburb',
+      'State',
+      'PostCode',
+      'Country',
+      'EmployerABN',
+      'EmployerName',
+      'PayPeriodStartDate',
+      'PayPeriodEndDate',
+      'PaymentDate',
+      'SuperannuationGuaranteeAmount',
+      'AwardOrProductivityAmount',
+      'PersonalContributionAmount',
+      'SalarySacrificeAmount',
+      'VoluntaryAfterTaxAmount',
+      'DefinedBenefitMemberPre1July1983Component',
+      'DefinedBenefitMemberPostJune1983TaxedComponent',
+      'DefinedBenefitMemberPostJune1983UntaxedComponent',
+      'DefinedBenefitEmployerContribution',
+    ];
+
+    const rows = [headers.join(',')];
+
+    // File reference: BizName_WeekStart
+    const fileRef = `${bizName.replace(/\s+/g, '_')}_${weekStart}`.substring(0, 50);
+    let rowNum = 1;
+
+    for (const payslip of payslipRows) {
+      const emp = employees.find(e => e.id === payslip.employee_id);
+      if (!emp) continue;
+      const superAmount = +(payslip.super_amount || 0);
+      if (superAmount <= 0) continue; // skip zero-super rows (casuals with no super etc)
+
+      // Fund ABN — derive from USI if not stored separately
+      // USI format is typically: <11-digit-ABN><ProductCode>
+      // e.g. "76514770399001" → ABN is "76514770399"
+      const rawUsi  = (emp.super_fund_usi || '').replace(/\s/g, '');
+      const fundAbn = (emp.super_fund_abn || (rawUsi.length >= 11 ? rawUsi.slice(0, 11) : '')).replace(/\s/g, '');
+
+      // Format DOB: YYYY-MM-DD → DD/MM/YYYY for SAFF
+      let dob = '';
+      if (emp.date_of_birth) {
+        const [y, m, d] = emp.date_of_birth.split('-');
+        dob = `${d}/${m}/${y}`;
+      }
+
+      // Format payment date: DD/MM/YYYY
+      const fmtSaffDate = (dateStr) => {
+        if (!dateStr) return '';
+        const [y, m, d] = dateStr.split('-');
+        return `${d}/${m}/${y}`;
+      };
+
+      rows.push([
+        `"${fileRef}_${rowNum}"`,          // YourFileReference — unique per row
+        `"${bizAbn}"`,                     // YourEntityIdentifier — employer ABN
+        '""',                              // TargetProductId — leave blank, clearing house fills
+        `"${fundAbn}"`,                    // ABN — super fund ABN
+        `"${emp.super_fund_usi || ''}"`,   // USI
+        '""',                              // SPIN — legacy, leave blank
+        `"${emp.super_fund || ''}"`,       // FundName
+        `"${emp.super_member_number || ''}"`, // MemberClientIdentifier
+        `"${emp.id.slice(0, 8).toUpperCase()}"`, // PayrollNumber
+        `"${emp.tfn || ''}"`,             // TFN
+        '""',                              // MemberEntityIdentifier — leave blank
+        `"${emp.last_name || ''}"`,        // FamilyName
+        `"${emp.first_name || ''}"`,       // GivenName
+        '""',                              // OtherGivenName
+        `"${dob}"`,                        // DateOfBirth
+        '""',                              // Gender — optional
+        `"${emp.phone || ''}"`,            // PhoneNumber
+        `"${emp.email || ''}"`,            // EmailAddress
+        '""',                              // AddressLine1
+        '""',                              // AddressLine2
+        '""',                              // Suburb
+        '""',                              // State
+        '""',                              // PostCode
+        '"AU"',                            // Country
+        `"${bizAbn}"`,                     // EmployerABN
+        `"${bizName}"`,                    // EmployerName
+        `"${fmtSaffDate(weekStart)}"`,     // PayPeriodStartDate
+        `"${fmtSaffDate(weekEnd)}"`,       // PayPeriodEndDate
+        `"${fmtSaffDate(paymentDate)}"`,   // PaymentDate
+        superAmount.toFixed(2),            // SuperannuationGuaranteeAmount (SGC)
+        '0.00',                            // AwardOrProductivityAmount
+        '0.00',                            // PersonalContributionAmount
+        '0.00',                            // SalarySacrificeAmount
+        '0.00',                            // VoluntaryAfterTaxAmount
+        '0.00',                            // DefinedBenefit fields — not applicable
+        '0.00',
+        '0.00',
+        '0.00',
+      ].join(','));
+
+      rowNum++;
+    }
+
+    const totalSuper = payslipRows.reduce((s, r) => s + (r.super_amount || 0), 0);
+    const empCount   = rows.length - 1; // exclude header
+
+    if (empCount === 0) {
+      toast('No super contributions found for this period.');
+      return;
+    }
+
+    const filename = `SuperStream_${bizName.replace(/\s+/g, '_')}_${weekStart}_${weekEnd}.csv`;
+    downloadCSV(rows.join('\n'), filename);
+
+    // Open SBSCH in new tab for convenience
+    window.open('https://www.ato.gov.au/businesses-and-organisations/super-for-employers/paying-super-contributions/small-business-superannuation-clearing-house', '_blank');
+
+    toast(`SuperStream file exported — ${empCount} employee${empCount !== 1 ? 's' : ''}, ${fmt(totalSuper)} total ✓`);
+
+  } catch (err) {
+    console.error('SuperStream export error:', err);
+    toast('Error generating SuperStream file: ' + err.message);
+  } finally {
+    if (btn) { btn.textContent = '⚡ Export SuperStream'; btn.disabled = false; }
+  }
+}
+
+// ── Show SuperStream export modal with summary + instructions
+async function showSuperStreamModal(weekStart, weekEnd) {
+  const modal = document.getElementById('superstream-modal');
+  if (!modal) return;
+
+  // Calculate super total for the period
+  const { data: payslipRows } = await _supabase
+    .from('payslips').select('employee_id, super_amount')
+    .eq('business_id', _businessId)
+    .gte('pay_period_start', weekStart)
+    .lte('pay_period_end', weekEnd);
+
+  const totalSuper = (payslipRows || []).reduce((s, r) => s + (r.super_amount || 0), 0);
+  const empCount   = (payslipRows || []).filter(r => (r.super_amount || 0) > 0).length;
+
+  const payDateObj = new Date(weekEnd);
+  payDateObj.setDate(payDateObj.getDate() + 7);
+  const dueDate = payDateObj.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  document.getElementById('superstream-summary').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
+      <div class="kpi"><div class="kpi-label">Employees</div><div class="kpi-value">${empCount}</div></div>
+      <div class="kpi"><div class="kpi-label">Total Super</div><div class="kpi-value">${fmt(totalSuper)}</div></div>
+    </div>
+    <div style="padding:14px;background:rgba(56,161,105,.08);border-radius:8px;border:1px solid rgba(56,161,105,.2);font-size:13px;margin-bottom:14px;">
+      <div style="font-weight:700;color:var(--success);margin-bottom:8px;">⚡ Payday Super — due ${dueDate}</div>
+      <div style="color:var(--text2);line-height:1.7;">
+        From <strong>1 July 2026</strong>, super must be paid within <strong>7 days</strong> of each pay day.<br>
+        1. Download the SuperStream file below<br>
+        2. Log in to your clearing house and upload the file<br>
+        3. Most clearing houses: <strong>SBSCH (free, ATO)</strong>, AMP, Rest, Hostplus
+      </div>
+    </div>
+    <div style="padding:12px 14px;background:rgba(232,197,71,.08);border-radius:8px;border:1px solid var(--accent2);font-size:12px;color:var(--text2);">
+      ⚠ Ensure all employees have <strong>Super Fund USI, member number and TFN</strong> entered. Missing details will be flagged on export.
+    </div>
+    <div style="margin-top:16px;">
+      <button id="superstream-export-btn" class="btn btn-primary" style="width:100%;"
+        onclick="exportSuperStream('${weekStart}','${weekEnd}')">
+        ⚡ Export SuperStream File
+      </button>
+    </div>
+  `;
+
+  modal.classList.add('show');
+}
