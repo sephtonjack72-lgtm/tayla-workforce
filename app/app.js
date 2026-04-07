@@ -1437,3 +1437,37 @@ function renderBarChart(el, data, metric) {
     <div style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center;">${m.label} by location</div>
   `;
 }
+
+// ══════════════════════════════════════════════════════
+//  STP2
+// ══════════════════════════════════════════════════════
+
+function openSTP2Modal() {
+  const modal = document.getElementById('stp2-modal');
+  if (!modal) return;
+
+  // Show readiness check by default
+  const issues = typeof checkSTP2Readiness === 'function' ? checkSTP2Readiness() : [];
+  const summaryEl = document.getElementById('stp2-summary');
+
+  summaryEl.innerHTML = `
+    <div style="margin-bottom:16px;font-size:13px;color:var(--text2);line-height:1.6;">
+      STP Phase 2 reports your payroll data to the ATO each pay run.
+      Download the JSON file and submit via the
+      <strong>ATO Business Portal</strong> or give it to your tax agent.
+    </div>
+    <div style="padding:12px 14px;background:var(--surface2);border-radius:8px;font-size:12px;margin-bottom:16px;">
+      <div style="font-weight:600;margin-bottom:6px;">Current pay period</div>
+      <div style="color:var(--text2);">${_tsWeekStart || 'Go to Timesheets tab first'} to ${typeof getWeekDates === 'function' && _tsWeekStart ? getWeekDates(_tsWeekStart)[6] : ''}</div>
+    </div>
+    ${issues.length > 0 ? `
+    <div style="padding:12px 14px;background:rgba(229,62,62,.08);border-radius:8px;border:1px solid rgba(229,62,62,.2);font-size:12px;color:var(--danger);margin-bottom:12px;">
+      ⚠ ${issues.length} employee${issues.length !== 1 ? 's' : ''} missing STP2 data — click "Check Employee Readiness" for details
+    </div>` : `
+    <div style="padding:12px 14px;background:rgba(56,161,105,.08);border-radius:8px;border:1px solid rgba(56,161,105,.2);font-size:12px;color:var(--success);margin-bottom:12px;">
+      ✓ All employees have required STP2 data
+    </div>`}
+  `;
+
+  modal.classList.add('show');
+}
