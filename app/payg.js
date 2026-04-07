@@ -69,7 +69,39 @@ function calcMedicare(weeklyGross, residency = 'australian') {
   return Math.round(weeklyGross * 0.02);
 }
 
-// Superannuation — 12% of ordinary time earnings
+// HECS/HELP repayment — ATO 2025-26 compulsory repayment thresholds
+// Applied on top of PAYG withholding when employee has a study/training loan
+// Reference: ato.gov.au/tax-rates-and-codes/tax-rates-study-and-training-loans
+function calcHECSRepayment(weeklyGross) {
+  const annual = weeklyGross * 52;
+  let rate = 0;
+
+  // 2025-26 HECS/HELP repayment rates
+  if      (annual < 54435)  rate = 0;
+  else if (annual < 62738)  rate = 0.010;
+  else if (annual < 66529)  rate = 0.020;
+  else if (annual < 70539)  rate = 0.025;
+  else if (annual < 74791)  rate = 0.030;
+  else if (annual < 79279)  rate = 0.035;
+  else if (annual < 84029)  rate = 0.040;
+  else if (annual < 89060)  rate = 0.045;
+  else if (annual < 94400)  rate = 0.050;
+  else if (annual < 100098) rate = 0.055;
+  else if (annual < 106168) rate = 0.060;
+  else if (annual < 112639) rate = 0.065;
+  else if (annual < 119538) rate = 0.070;
+  else if (annual < 126900) rate = 0.075;
+  else if (annual < 134614) rate = 0.080;
+  else if (annual < 142790) rate = 0.085;
+  else if (annual < 151479) rate = 0.090;
+  else if (annual < 160697) rate = 0.095;
+  else                      rate = 0.100;
+
+  if (rate === 0) return 0;
+  return Math.round((annual * rate) / 52);
+}
+
+// Superannuation — 12% of ordinary time earnings (FY2025-26)
 function calcSuper(weeklyGross) {
   return +(weeklyGross * 0.12).toFixed(2);
 }
