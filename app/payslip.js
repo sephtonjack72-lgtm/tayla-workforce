@@ -352,6 +352,7 @@ async function savePayslipRecord() {
     ytd_tax:           +(ytd.tax   + paygWithheld).toFixed(2),
     ytd_super:         +(ytd.super + superAmount).toFixed(2),
     ytd_allowances:    +(ytd.allow + (laundryAllow || 0)).toFixed(2),
+    payment_date:      weekEnd,
     pay_event_type:    'PAYEVNT',
     status:            'draft',
   }, { onConflict: 'business_id,employee_id,pay_period_start' });
