@@ -287,19 +287,73 @@ function applyPaygOverride() {
 //  SAVE PAYSLIP TO SUPABASE
 // ══════════════════════════════════════════════════════
 
+async function calcYTD(empId, currentPeriodEnd) {
+  // Get financial year start (1 July)
+  const periodDate = new Date(currentPeriodEnd);
+  const fyYear     = periodDate.getMonth() >= 6 ? periodDate.getFullYear() : periodDate.getFullYear() - 1;
+  const fyStart    = `${fyYear}-07-01`;
+
+  const { data } = await _supabase
+    .from('payslips')
+    .select('gross_pay, tax_withheld, super_amount, allowances')
+    .eq('business_id', _businessId)
+    .eq('employee_id', empId)
+    .gte('pay_period_start', fyStart)
+    .lt('pay_period_end', currentPeriodEnd);
+
+  return {
+    gross: +((data || []).reduce((s, r) => s + (r.gross_pay || 0), 0)).toFixed(2),
+    tax:   +((data || []).reduce((s, r) => s + (r.tax_withheld || 0), 0)).toFixed(2),
+    super: +((data || []).reduce((s, r) => s + (r.super_amount || 0), 0)).toFixed(2),
+    allow: +((data || []).reduce((s, r) => s + (r.allowances || 0), 0)).toFixed(2),
+  };
+}
+
 async function savePayslipRecord() {
   if (!_payslipData || !_businessId) return;
-  const { emp, weekStart, weekEnd, totalGross, totalTax, superAmount, netPay } = _payslipData;
+  const { emp, weekStart, weekEnd, grossPay, laundryAllow, totalGross,
+          paygWithheld, medicare, totalTax, superAmount, netPay,
+          shiftBreakdown } = _payslipData;
+
+  // Calculate YTD figures
+  const ytd = await calcYTD(emp.id, weekEnd);
+
+  // Build line items from shift breakdown for STP2 itemisation
+  const lineItems = (shiftBreakdown || []).map(s => ({
+    date:        s.date,
+    start:       s.shift?.start_time,
+    end:         s.shift?.end_time,
+    hours:       s.pay?.workedHours,
+    penaltyKey:  s.pay?.penaltyKey,
+    multiplier:  s.pay?.multiplier,
+    rate:        s.pay?.hourlyRate,
+    amount:      s.pay?.grossPay,
+    type:        ['overtime1','overtime2'].includes(s.pay?.penaltyKey) ? 'overtime' : 'ordinary',
+  }));
+
+  // Salary sacrifice (if tracked per employee)
+  const salarySacrifice = emp.salary_sacrifice || 0;
 
   const { error } = await _supabase.from('payslips').upsert({
-    business_id:      _businessId,
-    employee_id:      emp.id,
-    pay_period_start: weekStart,
-    pay_period_end:   weekEnd,
-    gross_pay:        totalGross,
-    tax_withheld:     totalTax,
-    super_amount:     superAmount,
-    net_pay:          netPay,
+    business_id:       _businessId,
+    employee_id:       emp.id,
+    pay_period_start:  weekStart,
+    pay_period_end:    weekEnd,
+    gross_pay:         totalGross,
+    tax_withheld:      paygWithheld,
+    medicare_levy:     medicare,
+    super_amount:      superAmount,
+    net_pay:           netPay,
+    allowances:        laundryAllow || 0,
+    hours_worked:      +(shiftBreakdown || []).reduce((s, r) => s + (r.pay?.workedHours || 0), 0).toFixed(2),
+    salary_sacrifice:  salarySacrifice,
+    line_items:        lineItems,
+    ytd_gross:         +(ytd.gross + totalGross).toFixed(2),
+    ytd_tax:           +(ytd.tax   + paygWithheld).toFixed(2),
+    ytd_super:         +(ytd.super + superAmount).toFixed(2),
+    ytd_allowances:    +(ytd.allow + (laundryAllow || 0)).toFixed(2),
+    pay_event_type:    'PAYEVNT',
+    status:            'draft',
   }, { onConflict: 'business_id,employee_id,pay_period_start' });
 
   if (error) console.error('Save payslip failed:', error);
