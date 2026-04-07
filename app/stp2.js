@@ -917,7 +917,7 @@ async function exportSuperStream(weekStart, weekEnd) {
     await recordSuperPayment(weekStart, weekEnd, totalSuper, empCount);
 
     // Open SBSCH in new tab for convenience
-    window.open('https://www.ato.gov.au/businesses-and-organisations/super-for-employers/paying-super-contributions/small-business-superannuation-clearing-house', '_blank');
+    window.open('https://www.ato.gov.au/businesses-and-organisations/super-for-employers/paying-super-contributions/how-to-pay-super', '_blank');
 
     toast(`SuperStream file exported — ${empCount} employee${empCount !== 1 ? 's' : ''}, ${fmt(totalSuper)} total ✓`);
 
@@ -958,8 +958,8 @@ async function showSuperStreamModal(weekStart, weekEnd) {
       <div style="color:var(--text2);line-height:1.7;">
         From <strong>1 July 2026</strong>, super must be paid within <strong>7 days</strong> of each pay day.<br>
         1. Download the SuperStream file below<br>
-        2. Log in to your clearing house and upload the file<br>
-        3. Most clearing houses: <strong>SBSCH (free, ATO)</strong>, AMP, Rest, Hostplus
+        2. Upload it to your clearing house (AMP, Rest, Hostplus, Beam, etc.)<br>
+        <span style="font-size:11px;color:var(--text3);">Note: The ATO's free SBSCH closes permanently on 1 July 2026 — if you haven't already, switch to a commercial clearing house now.</span>
       </div>
     </div>
     <div style="padding:12px 14px;background:rgba(232,197,71,.08);border-radius:8px;border:1px solid var(--accent2);font-size:12px;color:var(--text2);">
