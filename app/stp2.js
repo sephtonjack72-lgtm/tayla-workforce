@@ -569,3 +569,152 @@ function downloadCSV(content, filename) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+// ══════════════════════════════════════════════════════
+//  ABA FILE EXPORT (Australian Banking Association)
+//  Used for bulk bank transfers — upload to any Australian bank
+//  Format: DE (Direct Entry) file format
+// ══════════════════════════════════════════════════════
+
+async function exportABAFile(weekStart, weekEnd) {
+  const btn = document.getElementById('aba-export-btn');
+  if (btn) { btn.textContent = 'Generating…'; btn.disabled = true; }
+
+  try {
+    const { data: payslipRows, error } = await _supabase
+      .from('payslips').select('*')
+      .eq('business_id', _businessId)
+      .gte('pay_period_start', weekStart)
+      .lte('pay_period_end', weekEnd);
+
+    if (error) throw new Error(error.message);
+    if (!payslipRows?.length) {
+      toast('No payslips found for this period. Push payslips first.');
+      return;
+    }
+
+    // Check all employees have bank details
+    const missing = [];
+    for (const row of payslipRows) {
+      const emp = employees.find(e => e.id === row.employee_id);
+      if (emp && (!emp.bank_bsb || !emp.bank_account)) {
+        missing.push(`${emp.first_name} ${emp.last_name}`);
+      }
+    }
+    if (missing.length) {
+      toast(`⚠ Missing bank details for: ${missing.join(', ')}. Update employee records first.`);
+      if (btn) { btn.textContent = '🏦 Export ABA File'; btn.disabled = false; }
+      return;
+    }
+
+    // ABA file requires business bank details
+    const bizBsb     = _businessProfile?.bank_bsb     || '';
+    const bizAccount = _businessProfile?.bank_account  || '';
+    const bizName    = (_businessProfile?.biz_name     || 'BUSINESS').substring(0, 26).toUpperCase().padEnd(26);
+    const paymentDate = new Date(weekEnd).toLocaleDateString('en-AU', {
+      day: '2-digit', month: '2-digit', year: '2-digit'
+    }).replace(/\//g, '');
+
+    if (!bizBsb || !bizAccount) {
+      toast('⚠ Add your business BSB and account number in Business Settings first.');
+      if (btn) { btn.textContent = '🏦 Export ABA File'; btn.disabled = false; }
+      return;
+    }
+
+    const lines = [];
+
+    // ── Descriptive record (header) — Type 0
+    const cleanBsb     = bizBsb.replace(/[^0-9]/g, '').substring(0, 6).padEnd(6);
+    const cleanAccount = bizAccount.replace(/[^0-9]/g, '').substring(0, 9).padEnd(9);
+    lines.push(
+      '0' +                                    // Record type
+      ' '.repeat(17) +                         // BSB (blank for header)
+      '01' +                                   // Sequence number
+      'BNK' +                                  // Bank code (generic)
+      ' '.repeat(7) +                          // Filler
+      bizName +                                // User preferred specification
+      ''.padEnd(6, ' ') +                      // APCA user ID (6 chars)
+      `Pay ${weekStart} to ${weekEnd}`.substring(0, 12).padEnd(12) + // Description
+      paymentDate +                            // Date DDMMYY
+      ' '.repeat(40)                           // Filler
+    );
+
+    // ── Detail records (one per employee) — Type 1
+    let totalCredit = 0;
+    let totalDebit  = 0;
+    let recordCount = 0;
+
+    for (const row of payslipRows) {
+      const emp = employees.find(e => e.id === row.employee_id);
+      if (!emp || !emp.bank_bsb || !emp.bank_account) continue;
+
+      const netPay     = Math.round((row.net_pay || 0) * 100); // in cents
+      const empBsb     = emp.bank_bsb.replace(/[^0-9]/g, '').substring(0, 6).padEnd(6);
+      const empAccount = emp.bank_account.replace(/[^0-9]/g, '').substring(0, 9).padEnd(9);
+      const empName    = `${emp.first_name} ${emp.last_name}`.substring(0, 32).padEnd(32);
+      const lodgeName  = bizName.substring(0, 16).padEnd(16);
+      const reference  = `PAY ${weekStart}`.substring(0, 18).padEnd(18);
+
+      lines.push(
+        '1' +                                  // Record type
+        empBsb.substring(0, 3) + '-' + empBsb.substring(3, 6) + // BSB XXX-XXX
+        empAccount +                           // Account number (9 chars)
+        ' ' +                                  // Indicator (space = normal)
+        '50' +                                 // Transaction code (50 = credit)
+        String(netPay).padStart(10, '0') +     // Amount in cents (10 chars)
+        empName +                              // Account name (32 chars)
+        reference +                            // Lodgement reference (18 chars)
+        cleanBsb.substring(0, 3) + '-' + cleanBsb.substring(3, 6) + // Trace BSB
+        cleanAccount +                         // Trace account (9 chars)
+        lodgeName +                            // Remitter name (16 chars)
+        '00000000'                             // Withholding tax (8 chars, 0)
+      );
+
+      totalCredit += netPay;
+      recordCount++;
+    }
+
+    // Debit record for business account — Type 1
+    const debitAmount = totalCredit;
+    lines.push(
+      '1' +
+      cleanBsb.substring(0, 3) + '-' + cleanBsb.substring(3, 6) +
+      cleanAccount +
+      ' ' +
+      '13' +                                   // Transaction code 13 = debit
+      String(debitAmount).padStart(10, '0') +
+      bizName.substring(0, 32).padEnd(32) +
+      `Payroll ${weekStart}`.substring(0, 18).padEnd(18) +
+      cleanBsb.substring(0, 3) + '-' + cleanBsb.substring(3, 6) +
+      cleanAccount +
+      bizName.substring(0, 16).padEnd(16) +
+      '00000000'
+    );
+    totalDebit += debitAmount;
+
+    // ── File total record (footer) — Type 7
+    lines.push(
+      '7' +
+      '999-999' +                              // BSB filler
+      ' '.repeat(12) +                         // Filler
+      String(totalDebit).padStart(10, '0') +   // Total debit
+      String(totalCredit).padStart(10, '0') +  // Total credit
+      String(Math.abs(totalCredit - totalDebit)).padStart(10, '0') + // Net total
+      ' '.repeat(24) +                         // Filler
+      String(recordCount + 1).padStart(6, '0') + // Record count (including debit)
+      ' '.repeat(40)                           // Filler
+    );
+
+    const content  = lines.join('\r\n');
+    const filename = `ABA_${_businessProfile?.biz_name?.replace(/\s+/g,'_')}_${weekStart}.aba`;
+    downloadCSV(content, filename);
+
+    toast(`ABA file exported — ${recordCount} payment${recordCount !== 1 ? 's' : ''}, total ${fmt(totalCredit / 100)} ✓`);
+
+  } catch (err) {
+    console.error('ABA export error:', err);
+    toast('Error generating ABA file: ' + err.message);
+  } finally {
+    if (btn) { btn.textContent = '🏦 Export ABA File'; btn.disabled = false; }
+  }
+}
