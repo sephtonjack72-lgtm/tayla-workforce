@@ -188,12 +188,11 @@ async function generateSTP2Report(weekStart, weekEnd) {
       .select('*')
       .eq('business_id', _businessId)
       .gte('pay_period_start', weekStart)
-      .lte('pay_period_end', weekEnd)
-      .eq('status', 'approved');
+      .lte('pay_period_end', weekEnd);
 
     if (error) { toast('Error loading payslips: ' + error.message); return; }
     if (!payslipRows?.length) {
-      toast('No approved payslips found for this period. Push and approve payslips first.');
+      toast('No payslips found for this period. Push payslips first from the Timesheets tab.');
       return;
     }
 
@@ -206,18 +205,25 @@ async function generateSTP2Report(weekStart, weekEnd) {
       const emp = employees.find(e => e.id === row.employee_id);
       if (!emp) continue;
 
+      // Extract allowances from line_items
+      const lineItems = row.line_items || [];
+      const laundryAllow = lineItems
+        .filter(l => l.type === 'allowance' || l.description?.toLowerCase().includes('laundry'))
+        .reduce((s, l) => s + (l.amount || 0), 0);
+
       const payslipData = {
-        grossPay:     row.gross_pay      || 0,
-        laundryAllow: row.allowances     || 0,
-        totalGross:   row.gross_pay      || 0,
-        paygWithheld: row.tax_withheld   || 0,
-        superAmount:  row.super_amount   || 0,
-        netPay:       row.net_pay        || 0,
-        shiftBreakdown: row.line_items   || [],
+        grossPay:       row.gross_pay    || 0,
+        laundryAllow:   laundryAllow,
+        totalGross:     row.gross_pay    || 0,
+        paygWithheld:   row.tax_withheld || 0,
+        superAmount:    row.super_amount || 0,
+        netPay:         row.net_pay      || 0,
+        hoursWorked:    row.hours_worked || 0,
+        shiftBreakdown: lineItems,
         ytd: {
-          gross: row.ytd_gross || 0,
-          tax:   row.ytd_tax   || 0,
-          super: row.ytd_super || 0,
+          gross: 0, // YTD not yet tracked — future enhancement
+          tax:   0,
+          super: 0,
         },
       };
 
