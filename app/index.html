@@ -129,6 +129,7 @@
     <div class="tab" data-page="roster"             onclick="showPage('roster')">📅 Roster</div>
     <div class="tab" data-page="sales"              onclick="showPage('sales')">💰 Sales Projections</div>
     <div class="tab" data-page="timesheets"         onclick="showPage('timesheets')">⏱ Timesheets</div>
+    <div class="tab" data-page="leave"              onclick="showPage('leave')">🌴 Leave</div>
     <div class="tab" data-page="awards"             onclick="showPage('awards')">📋 Awards</div>
   </nav>
 
@@ -328,7 +329,122 @@
     </div>
   </div>
 
+  <!-- ══════════════════ LEAVE ══════════════════ -->
+  <div id="leave" class="page">
+    <div id="leave-page-content">
+      <div style="padding:48px;text-align:center;color:var(--text3);">Loading leave data…</div>
+    </div>
+  </div>
+
   </main>
+
+<!-- Leave Request Modal -->
+<div class="modal-overlay" id="leave-request-modal">
+  <div class="modal" style="max-width:480px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h3 style="margin:0;">🌴 Leave Request</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('leave-request-modal')">✕</button>
+    </div>
+    <div class="form-group">
+      <label>Employee</label>
+      <select id="leave-emp-select" class="form-input"></select>
+    </div>
+    <div class="form-group">
+      <label>Leave Type</label>
+      <select id="leave-type-select" class="form-input">
+        <option value="annual">Annual Leave</option>
+        <option value="sick">Sick Leave</option>
+        <option value="personal">Personal Leave</option>
+        <option value="unpaid">Unpaid Leave</option>
+        <option value="long">Long Service Leave</option>
+      </select>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="form-group">
+        <label>Start Date</label>
+        <input type="date" id="leave-start" class="form-input">
+      </div>
+      <div class="form-group">
+        <label>End Date</label>
+        <input type="date" id="leave-end" class="form-input">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Hours</label>
+      <input type="number" id="leave-hours" class="form-input" placeholder="e.g. 38" min="0" step="0.5">
+    </div>
+    <div class="form-group">
+      <label>Notes (optional)</label>
+      <input type="text" id="leave-notes" class="form-input" placeholder="e.g. Family holiday">
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn btn-ghost" onclick="closeModal('leave-request-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveLeaveRequest()">Submit Request</button>
+    </div>
+  </div>
+</div>
+
+<!-- Leave Adjust Modal -->
+<div class="modal-overlay" id="leave-adjust-modal">
+  <div class="modal" style="max-width:400px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h3 style="margin:0;">Adjust Leave Balances</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('leave-adjust-modal')">✕</button>
+    </div>
+    <div id="adjust-leave-emp-name" style="font-weight:600;margin-bottom:16px;color:var(--accent);"></div>
+    <input type="hidden" id="adjust-leave-emp-id">
+    <div class="form-group">
+      <label>Annual Leave Hours</label>
+      <input type="number" id="adjust-annual-hours" class="form-input" min="0" step="0.5">
+    </div>
+    <div class="form-group">
+      <label>Sick Leave Hours</label>
+      <input type="number" id="adjust-sick-hours" class="form-input" min="0" step="0.5">
+    </div>
+    <div class="form-group">
+      <label>Personal Leave Hours</label>
+      <input type="number" id="adjust-personal-hours" class="form-input" min="0" step="0.5">
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn btn-ghost" onclick="closeModal('leave-adjust-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveLeaveAdjustment()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Termination Modal -->
+<div class="modal-overlay" id="termination-modal">
+  <div class="modal" style="max-width:480px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h3 style="margin:0;">Process Termination</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('termination-modal')">✕</button>
+    </div>
+    <div id="term-emp-name" style="font-weight:700;font-size:16px;margin-bottom:16px;"></div>
+    <input type="hidden" id="term-emp-id">
+    <div class="form-group">
+      <label>Termination Type</label>
+      <select id="term-type" class="form-input" onchange="updateTerminationCalc()">
+        <option value="resignation">Resignation</option>
+        <option value="redundancy">Redundancy</option>
+        <option value="dismissal">Dismissal</option>
+        <option value="dismissal_serious">Dismissal — Serious Misconduct</option>
+        <option value="end_of_contract">End of Contract</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Termination Date</label>
+      <input type="date" id="term-date" class="form-input" onchange="updateTerminationCalc()">
+    </div>
+    <div id="term-calc"></div>
+    <div style="padding:12px;background:rgba(229,62,62,.08);border-radius:8px;border:1px solid rgba(229,62,62,.2);font-size:12px;color:var(--danger);margin-top:16px;">
+      ⚠ This will set the employee as inactive and create a final payslip. Tax on termination pay should be verified with your accountant.
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn btn-ghost" onclick="closeModal('termination-modal')">Cancel</button>
+      <button class="btn btn-primary" style="background:var(--danger);border-color:var(--danger);" onclick="processTermination()">Process Termination</button>
+    </div>
+  </div>
+</div>
 </div>
 
 <!-- ══════════════════ MODALS ══════════════════ -->
@@ -721,6 +837,17 @@
           <label class="form-label">Phone</label>
           <input type="text" id="biz-phone-input" class="form-input" placeholder="03 XXXX XXXX">
         </div>
+        <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px;">
+          <div style="font-weight:700;font-size:13px;margin-bottom:12px;">Bank Details <span style="font-size:11px;color:var(--text3);font-weight:400;">Required for ABA payroll file</span></div>
+          <div class="form-row">
+            <label class="form-label">Business BSB</label>
+            <input type="text" id="biz-bsb-input" class="form-input" placeholder="XXX-XXX">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Business Account Number</label>
+            <input type="text" id="biz-bank-account-input" class="form-input" placeholder="Account number">
+          </div>
+        </div>
         <div id="acct-biz-msg" style="margin-top:10px;font-size:12px;min-height:18px;"></div>
         <button class="btn btn-primary" style="margin-top:16px;" onclick="saveBusinessSettings()">Save Changes</button>
       </div>
@@ -762,6 +889,7 @@
       <button class="btn btn-primary btn-sm" id="stp2-generate-btn" onclick="generateSTP2Report(_tsWeekStart, getWeekDates(_tsWeekStart)[6])">📤 Export STP2</button>
       <button class="btn btn-ghost btn-sm" id="xero-export-btn" onclick="exportXeroCSV(_tsWeekStart, getWeekDates(_tsWeekStart)[6])">📊 Export for Xero</button>
       <button class="btn btn-ghost btn-sm" id="myob-export-btn" onclick="exportMYOBCSV(_tsWeekStart, getWeekDates(_tsWeekStart)[6])">📊 Export for MYOB</button>
+      <button class="btn btn-ghost btn-sm" id="aba-export-btn" onclick="exportABAFile(_tsWeekStart, getWeekDates(_tsWeekStart)[6])">🏦 Export ABA File</button>
     </div>
   </div>
 </div>
@@ -787,6 +915,7 @@
 <script src="payg.js"></script>
 <script src="payslip.js"></script>
 <script src="stp2.js"></script>
+<script src="leave.js"></script>
 <script src="app.js"></script>
 <script>
   // Populate shift employee select when modal opens
