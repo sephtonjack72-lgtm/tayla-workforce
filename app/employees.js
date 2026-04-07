@@ -141,6 +141,7 @@ function openEditEmployee(id) {
   document.getElementById('emp-age').value          = e.age        || '';
   document.getElementById('emp-tfn').value          = e.tfn        || '';
   document.getElementById('emp-super-fund').value   = e.super_fund || '';
+  document.getElementById('emp-super-usi').value    = e.super_fund_usi || '';
   document.getElementById('emp-super-number').value = e.super_member_number || '';
   document.getElementById('emp-bank-bsb').value     = e.bank_bsb   || '';
   document.getElementById('emp-bank-account').value = e.bank_account || '';
@@ -170,6 +171,7 @@ async function saveEmployee() {
     age:                  parseInt(document.getElementById('emp-age').value) || null,
     tfn:                  document.getElementById('emp-tfn').value.trim(),
     super_fund:           document.getElementById('emp-super-fund').value.trim(),
+    super_fund_usi:       document.getElementById('emp-super-usi').value.trim(),
     super_member_number:  document.getElementById('emp-super-number').value.trim(),
     bank_bsb:             document.getElementById('emp-bank-bsb').value.trim(),
     bank_account:         document.getElementById('emp-bank-account').value.trim(),
