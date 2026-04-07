@@ -109,6 +109,7 @@ function buildSTP2EmployeeRecord(emp, payslipData, periodStart, periodEnd, payme
       totalGross:   +totalGross.toFixed(2),
       taxWithheld:  +(payslipData.paygWithheld || 0).toFixed(2),
       medicareLevy: +(payslipData.medicareLevy || 0).toFixed(2),
+      hecsRepayment: +(payslipData.hecsRepayment || 0).toFixed(2),
       hoursWorked:  +(payslipData.hoursWorked  || 0).toFixed(2),
     },
 
@@ -154,11 +155,14 @@ function buildSTP2Payload(payslips, businessProfile, paymentDate) {
 
     // Employer (payer) details
     employer: {
-      abn:          businessProfile.abn         || '',
-      businessName: businessProfile.biz_name    || '',
-      address:      businessProfile.address     || '',
-      phone:        businessProfile.phone       || '',
-      bms_id:       businessProfile.id,          // Business Management System ID
+      abn:          businessProfile.abn              || '',
+      businessName: businessProfile.biz_name         || '',
+      addressStreet:  businessProfile.address_street  || businessProfile.address || '',
+      addressSuburb:  businessProfile.address_suburb  || '',
+      addressState:   businessProfile.address_state   || '',
+      addressPostcode: businessProfile.address_postcode || '',
+      phone:        businessProfile.phone             || '',
+      bms_id:       businessProfile.id,
     },
 
     // Pay event
@@ -908,6 +912,9 @@ async function exportSuperStream(weekStart, weekEnd) {
 
     const filename = `SuperStream_${bizName.replace(/\s+/g, '_')}_${weekStart}_${weekEnd}.csv`;
     downloadCSV(rows.join('\n'), filename);
+
+    // Record audit trail for Payday Super compliance
+    await recordSuperPayment(weekStart, weekEnd, totalSuper, empCount);
 
     // Open SBSCH in new tab for convenience
     window.open('https://www.ato.gov.au/businesses-and-organisations/super-for-employers/paying-super-contributions/small-business-superannuation-clearing-house', '_blank');
