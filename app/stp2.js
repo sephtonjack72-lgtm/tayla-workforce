@@ -43,42 +43,44 @@ function getSTP2IncomeType(emp) {
 
 // ── Build STP2 employee income statement
 function buildSTP2EmployeeRecord(emp, payslipData, periodStart, periodEnd, paymentDate) {
-  const empBasis  = STP2_EMP_BASIS[emp.employment_type] || 'C';
-  const taxScale  = getSTP2TaxScale(emp);
+  const empBasis   = STP2_EMP_BASIS[emp.employment_type] || 'C';
+  const taxScale   = getSTP2TaxScale(emp);
   const incomeType = getSTP2IncomeType(emp);
+  const isTerminated = !!emp.termination_date;
 
-  // Break down gross into components
-  const ote       = payslipData.grossPay || 0;           // Ordinary time earnings
-  const allowances = payslipData.laundryAllow || 0;       // Allowances
-  const totalGross = payslipData.totalGross || ote;
+  // Income components
+  const grossPay    = payslipData.grossPay    || 0;
+  const allowances  = payslipData.allowances  || 0;
+  const totalGross  = payslipData.totalGross  || grossPay;
+  const salarySac   = payslipData.salarySacrifice || emp.salary_sacrifice || 0;
 
-  // Overtime (if tracked separately — from shift breakdown)
+  // Separate ordinary from overtime using line_items
   let overtimePay = 0;
-  if (payslipData.shiftBreakdown) {
+  let ordinaryPay = grossPay;
+  if (payslipData.shiftBreakdown?.length) {
     overtimePay = +payslipData.shiftBreakdown
-      .filter(s => ['overtime1','overtime2'].includes(s.pay?.penaltyKey))
-      .reduce((sum, s) => sum + (s.pay?.grossPay || 0), 0)
+      .filter(s => s.type === 'overtime')
+      .reduce((sum, s) => sum + (s.amount || 0), 0)
       .toFixed(2);
+    ordinaryPay = +(grossPay - overtimePay).toFixed(2);
   }
-
-  // YTD figures
-  const ytd = payslipData.ytd || {};
 
   return {
     // Employee identification
-    payeeId:        emp.id,
-    familyName:     emp.last_name  || '',
-    givenName:      emp.first_name || '',
-    tfn:            emp.tfn        || '000000000',
-    dateOfBirth:    null, // Not stored — optional in STP2
-    gender:         null, // Not stored — optional
+    payeeId:    emp.id,
+    familyName: emp.last_name  || '',
+    givenName:  emp.first_name || '',
+    tfn:        emp.tfn        || '000000000',
+    dateOfBirth: emp.date_of_birth || null,
+    gender:      emp.gender        || null,
 
     // Employment details
     employmentBasis: empBasis,
     incomeType:      incomeType,
     taxScale:        taxScale,
-    startDate:       emp.start_date || null,
-    endDate:         null,
+    startDate:       emp.start_date      || null,
+    endDate:         emp.termination_date || null,
+    isTerminated,
 
     // Income for this period
     income: {
@@ -86,42 +88,45 @@ function buildSTP2EmployeeRecord(emp, payslipData, periodStart, periodEnd, payme
       periodEnd,
       paymentDate,
 
-      // Gross components (STP2 requires itemisation)
       salaryAndWages: {
-        ordinary:   +(ote - overtimePay).toFixed(2),
+        ordinary:   +ordinaryPay.toFixed(2),
         overtime:   +overtimePay.toFixed(2),
         bonuses:    0,
         commission: 0,
         directors:  0,
-        total:      +ote.toFixed(2),
+        total:      +grossPay.toFixed(2),
       },
 
-      // Allowances (itemised)
       allowances: allowances > 0 ? [
-        {
-          type:   'LD',   // Laundry/dry cleaning allowance
-          amount: +allowances.toFixed(2),
-        }
+        { type: 'LD', description: 'Laundry allowance', amount: +allowances.toFixed(2) }
       ] : [],
 
-      totalGross:     +totalGross.toFixed(2),
-      taxWithheld:    +(payslipData.paygWithheld || 0).toFixed(2),
+      salarySacrifice: salarySac > 0 ? {
+        type:   'S', // Superannuation
+        amount: +salarySac.toFixed(2),
+      } : null,
+
+      totalGross:   +totalGross.toFixed(2),
+      taxWithheld:  +(payslipData.paygWithheld || 0).toFixed(2),
+      medicareLevy: +(payslipData.medicareLevy || 0).toFixed(2),
+      hoursWorked:  +(payslipData.hoursWorked  || 0).toFixed(2),
     },
 
     // Superannuation
     superannuation: {
       fundName:     emp.super_fund          || '',
-      usi:          emp.super_fund_usi      || '', // Required for STP2
+      usi:          emp.super_fund_usi      || '',
       memberNumber: emp.super_member_number || '',
       amount:       +(payslipData.superAmount || 0).toFixed(2),
-      type:         'OTE', // Ordinary time earnings super
+      type:         'OTE',
     },
 
-    // YTD totals (cumulative from start of financial year)
+    // YTD totals — cumulative from 1 July (now calculated from DB)
     ytdTotals: {
-      grossIncome:  +((ytd.gross  || 0) + totalGross).toFixed(2),
-      taxWithheld:  +((ytd.tax    || 0) + (payslipData.paygWithheld || 0)).toFixed(2),
-      super:        +((ytd.super  || 0) + (payslipData.superAmount  || 0)).toFixed(2),
+      grossIncome: +(payslipData.ytd?.gross || 0).toFixed(2),
+      taxWithheld: +(payslipData.ytd?.tax   || 0).toFixed(2),
+      super:       +(payslipData.ytd?.super  || 0).toFixed(2),
+      allowances:  +(payslipData.ytd?.allow  || 0).toFixed(2),
     },
   };
 }
@@ -212,18 +217,21 @@ async function generateSTP2Report(weekStart, weekEnd) {
         .reduce((s, l) => s + (l.amount || 0), 0);
 
       const payslipData = {
-        grossPay:       row.gross_pay    || 0,
-        laundryAllow:   laundryAllow,
-        totalGross:     row.gross_pay    || 0,
-        paygWithheld:   row.tax_withheld || 0,
-        superAmount:    row.super_amount || 0,
-        netPay:         row.net_pay      || 0,
-        hoursWorked:    row.hours_worked || 0,
-        shiftBreakdown: lineItems,
+        grossPay:        row.gross_pay      || 0,
+        allowances:      row.allowances     || laundryAllow || 0,
+        totalGross:      row.gross_pay      || 0,
+        paygWithheld:    row.tax_withheld   || 0,
+        medicareLevy:    row.medicare_levy  || 0,
+        superAmount:     row.super_amount   || 0,
+        netPay:          row.net_pay        || 0,
+        hoursWorked:     row.hours_worked   || 0,
+        salarySacrifice: row.salary_sacrifice || 0,
+        shiftBreakdown:  lineItems,
         ytd: {
-          gross: 0, // YTD not yet tracked — future enhancement
-          tax:   0,
-          super: 0,
+          gross: row.ytd_gross      || 0,
+          tax:   row.ytd_tax        || 0,
+          super: row.ytd_super      || 0,
+          allow: row.ytd_allowances || 0,
         },
       };
 
@@ -300,10 +308,12 @@ function checkSTP2Readiness() {
   const issues = [];
   employees.filter(e => e.active !== false).forEach(emp => {
     const empIssues = [];
-    if (!emp.tfn)               empIssues.push('TFN missing');
-    if (!emp.super_fund)        empIssues.push('Super fund missing');
-    if (!emp.super_fund_usi)    empIssues.push('Super fund USI missing');
+    if (!emp.tfn)                 empIssues.push('TFN missing');
+    if (!emp.super_fund)          empIssues.push('Super fund name missing');
+    if (!emp.super_fund_usi)      empIssues.push('Super fund USI missing');
     if (!emp.super_member_number) empIssues.push('Super member number missing');
+    if (!emp.date_of_birth)       empIssues.push('Date of birth missing (recommended)');
+    if (!emp.start_date)          empIssues.push('Start date missing');
     if (empIssues.length) {
       issues.push({ name: `${emp.first_name} ${emp.last_name}`, issues: empIssues });
     }
