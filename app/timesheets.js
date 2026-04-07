@@ -476,6 +476,12 @@ async function executePushPayslips() {
       sent++;
       if (rowStatus) rowStatus.innerHTML = '<span class="badge badge-green">✓ Sent</span>';
 
+      // Accrue leave for hours worked this pay period
+      if (typeof accrueLeaveForPayPeriod === 'function') {
+        const hoursWorked = +shiftBreakdown.reduce((s,r) => s+(r.pay?.workedHours||0), 0).toFixed(2);
+        await accrueLeaveForPayPeriod(emp.id, hoursWorked);
+      }
+
     } catch (err) {
       failed++;
       if (rowStatus) rowStatus.innerHTML = `<span class="badge badge-red" title="${err.message}">✕ Failed</span>`;
