@@ -288,6 +288,10 @@
           <button class="btn btn-primary btn-sm" id="ts-push-btn" onclick="openPushPayslipsModal()" style="white-space:nowrap;">
             📲 Push Payslips
           </button>
+          <button class="btn btn-ghost btn-sm" id="stp2-export-btn" onclick="openSTP2Modal()" style="white-space:nowrap;">
+            📤 STP2 Export
+          </button>
+          </button>
         </div>
       </div>
       <div class="card-body" style="padding:0;">
@@ -383,6 +387,10 @@
         <div class="form-group full">
           <label>Super Fund</label>
           <input type="text" id="emp-super-fund" placeholder="e.g. Australian Super">
+        </div>
+        <div class="form-group">
+          <label>Super Fund USI <span style="font-size:10px;color:var(--text3);font-weight:400;">Required for STP2</span></label>
+          <input type="text" id="emp-super-usi" placeholder="e.g. STA0100AU">
         </div>
         <div class="form-group">
           <label>Super Member Number</label>
@@ -719,6 +727,21 @@
   </div>
 </div>
 
+<!-- STP2 Modal -->
+<div class="modal-overlay" id="stp2-modal">
+  <div class="modal" style="max-width:540px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h3 style="margin:0;">📤 STP Phase 2 Export</h3>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('stp2-modal').classList.remove('show')">✕</button>
+    </div>
+    <div id="stp2-summary"></div>
+    <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;">
+      <button class="btn btn-ghost btn-sm" onclick="showSTP2Readiness()">Check Employee Readiness</button>
+      <button class="btn btn-primary btn-sm" id="stp2-generate-btn" onclick="generateSTP2Report(_tsWeekStart, getWeekDates(_tsWeekStart)[6])">📤 Generate & Download</button>
+    </div>
+  </div>
+</div>
+
 <!-- Billing/Trial banner -->
 <div id="billing-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:999;padding:12px 24px;display:none;align-items:center;justify-content:space-between;font-size:13px;font-weight:500;">
   <span id="billing-banner-msg"></span>
@@ -739,6 +762,7 @@
 <script src="timesheets.js"></script>
 <script src="payg.js"></script>
 <script src="payslip.js"></script>
+<script src="stp2.js"></script>
 <script src="app.js"></script>
 <script>
   // Populate shift employee select when modal opens
