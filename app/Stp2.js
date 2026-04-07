@@ -1,0 +1,336 @@
+/* ══════════════════════════════════════════════════════
+   Tayla Workforce — STP Phase 2 Generator
+   stp2.js
+
+   Generates ATO-compliant STP2 JSON payloads for
+   submission via ATO Business Portal or tax agent.
+
+   Reference: ATO STP Phase 2 Employer Reporting Guidelines
+   https://www.ato.gov.au/businesses-and-organisations/hiring-and-paying-your-workers/single-touch-payroll
+══════════════════════════════════════════════════════ */
+
+// ── Income type codes (ATO STP2)
+const STP2_INCOME_TYPES = {
+  SAL: 'SAL', // Salary and wages
+  CHP: 'CHP', // Closely held payees
+  LAB: 'LAB', // Labour hire
+  VOL: 'VOL', // Voluntary agreement
+  OSP: 'OSP', // Other specified payment
+};
+
+// ── Employment basis codes
+const STP2_EMP_BASIS = {
+  permanent: 'F', // Full-time
+  parttime:  'P', // Part-time
+  casual:    'C', // Casual
+  labour:    'L', // Labour hire
+};
+
+// ── Tax scale codes
+function getSTP2TaxScale(emp) {
+  const residency = emp.residency_status || 'australian';
+  if (residency === 'foreign')          return '3'; // Foreign resident
+  if (residency === 'working_holiday')  return '7'; // Working holiday maker
+  if (!emp.tfn || emp.tfn === '000000000') return '4'; // No TFN
+  if (emp.tax_free_threshold !== false) return '2'; // Tax free threshold claimed
+  return '1'; // No tax free threshold
+}
+
+// ── Get income type from employment type
+function getSTP2IncomeType(emp) {
+  return STP2_INCOME_TYPES.SAL; // Default — salary and wages for employed workers
+}
+
+// ── Build STP2 employee income statement
+function buildSTP2EmployeeRecord(emp, payslipData, periodStart, periodEnd, paymentDate) {
+  const empBasis  = STP2_EMP_BASIS[emp.employment_type] || 'C';
+  const taxScale  = getSTP2TaxScale(emp);
+  const incomeType = getSTP2IncomeType(emp);
+
+  // Break down gross into components
+  const ote       = payslipData.grossPay || 0;           // Ordinary time earnings
+  const allowances = payslipData.laundryAllow || 0;       // Allowances
+  const totalGross = payslipData.totalGross || ote;
+
+  // Overtime (if tracked separately — from shift breakdown)
+  let overtimePay = 0;
+  if (payslipData.shiftBreakdown) {
+    overtimePay = +payslipData.shiftBreakdown
+      .filter(s => ['overtime1','overtime2'].includes(s.pay?.penaltyKey))
+      .reduce((sum, s) => sum + (s.pay?.grossPay || 0), 0)
+      .toFixed(2);
+  }
+
+  // YTD figures
+  const ytd = payslipData.ytd || {};
+
+  return {
+    // Employee identification
+    payeeId:        emp.id,
+    familyName:     emp.last_name  || '',
+    givenName:      emp.first_name || '',
+    tfn:            emp.tfn        || '000000000',
+    dateOfBirth:    null, // Not stored — optional in STP2
+    gender:         null, // Not stored — optional
+
+    // Employment details
+    employmentBasis: empBasis,
+    incomeType:      incomeType,
+    taxScale:        taxScale,
+    startDate:       emp.start_date || null,
+    endDate:         null,
+
+    // Income for this period
+    income: {
+      periodStart,
+      periodEnd,
+      paymentDate,
+
+      // Gross components (STP2 requires itemisation)
+      salaryAndWages: {
+        ordinary:   +(ote - overtimePay).toFixed(2),
+        overtime:   +overtimePay.toFixed(2),
+        bonuses:    0,
+        commission: 0,
+        directors:  0,
+        total:      +ote.toFixed(2),
+      },
+
+      // Allowances (itemised)
+      allowances: allowances > 0 ? [
+        {
+          type:   'LD',   // Laundry/dry cleaning allowance
+          amount: +allowances.toFixed(2),
+        }
+      ] : [],
+
+      totalGross:     +totalGross.toFixed(2),
+      taxWithheld:    +(payslipData.paygWithheld || 0).toFixed(2),
+    },
+
+    // Superannuation
+    superannuation: {
+      fundName:     emp.super_fund          || '',
+      usi:          emp.super_fund_usi      || '', // Required for STP2
+      memberNumber: emp.super_member_number || '',
+      amount:       +(payslipData.superAmount || 0).toFixed(2),
+      type:         'OTE', // Ordinary time earnings super
+    },
+
+    // YTD totals (cumulative from start of financial year)
+    ytdTotals: {
+      grossIncome:  +((ytd.gross  || 0) + totalGross).toFixed(2),
+      taxWithheld:  +((ytd.tax    || 0) + (payslipData.paygWithheld || 0)).toFixed(2),
+      super:        +((ytd.super  || 0) + (payslipData.superAmount  || 0)).toFixed(2),
+    },
+  };
+}
+
+// ── Build full STP2 event payload
+function buildSTP2Payload(payslips, businessProfile, paymentDate) {
+  const now = new Date().toISOString();
+
+  // Financial year
+  const pDate = new Date(paymentDate);
+  const fyStart = pDate.getMonth() >= 6
+    ? `${pDate.getFullYear()}-07-01`
+    : `${pDate.getFullYear() - 1}-07-01`;
+
+  return {
+    // ATO submission metadata
+    metadata: {
+      softwareName:    'Tayla Workforce',
+      softwareVersion: '1.0',
+      softwareId:      'TAYLA-WF-001', // Register with ATO for production
+      submissionDate:  now,
+      paymentDate,
+      financialYearStart: fyStart,
+    },
+
+    // Employer (payer) details
+    employer: {
+      abn:          businessProfile.abn         || '',
+      businessName: businessProfile.biz_name    || '',
+      address:      businessProfile.address     || '',
+      phone:        businessProfile.phone       || '',
+      bms_id:       businessProfile.id,          // Business Management System ID
+    },
+
+    // Pay event
+    payEvent: {
+      type:        'PAYEVNT',
+      messageId:   `TAYLA-${Date.now()}`,
+      paymentDate,
+      payees:      payslips,
+    },
+
+    // Summary
+    summary: {
+      totalPayees:    payslips.length,
+      totalGross:     +payslips.reduce((s, p) => s + (p.income?.totalGross || 0), 0).toFixed(2),
+      totalTax:       +payslips.reduce((s, p) => s + (p.income?.taxWithheld || 0), 0).toFixed(2),
+      totalSuper:     +payslips.reduce((s, p) => s + (p.superannuation?.amount || 0), 0).toFixed(2),
+    },
+  };
+}
+
+// ── Generate and download STP2 file
+async function generateSTP2Report(weekStart, weekEnd) {
+  if (!_businessId || !_businessProfile) { toast('No business loaded'); return; }
+
+  const btn = document.getElementById('stp2-export-btn');
+  if (btn) { btn.textContent = 'Generating…'; btn.disabled = true; }
+
+  try {
+    // Load payslips for this pay period from Supabase
+    const { data: payslipRows, error } = await _supabase
+      .from('payslips')
+      .select('*')
+      .eq('business_id', _businessId)
+      .gte('pay_period_start', weekStart)
+      .lte('pay_period_end', weekEnd)
+      .eq('status', 'approved');
+
+    if (error) { toast('Error loading payslips: ' + error.message); return; }
+    if (!payslipRows?.length) {
+      toast('No approved payslips found for this period. Push and approve payslips first.');
+      return;
+    }
+
+    // Payment date = last day of pay period
+    const paymentDate = weekEnd;
+
+    // Build employee records
+    const payeeRecords = [];
+    for (const row of payslipRows) {
+      const emp = employees.find(e => e.id === row.employee_id);
+      if (!emp) continue;
+
+      const payslipData = {
+        grossPay:     row.gross_pay      || 0,
+        laundryAllow: row.allowances     || 0,
+        totalGross:   row.gross_pay      || 0,
+        paygWithheld: row.tax_withheld   || 0,
+        superAmount:  row.super_amount   || 0,
+        netPay:       row.net_pay        || 0,
+        shiftBreakdown: row.line_items   || [],
+        ytd: {
+          gross: row.ytd_gross || 0,
+          tax:   row.ytd_tax   || 0,
+          super: row.ytd_super || 0,
+        },
+      };
+
+      payeeRecords.push(
+        buildSTP2EmployeeRecord(emp, payslipData, weekStart, weekEnd, paymentDate)
+      );
+    }
+
+    if (!payeeRecords.length) {
+      toast('No matching employees found for payslips');
+      return;
+    }
+
+    const payload = buildSTP2Payload(payeeRecords, _businessProfile, paymentDate);
+
+    // Download as JSON file
+    const json     = JSON.stringify(payload, null, 2);
+    const blob     = new Blob([json], { type: 'application/json' });
+    const url      = URL.createObjectURL(blob);
+    const a        = document.createElement('a');
+    a.href         = url;
+    a.download     = `STP2_${_businessProfile.biz_name?.replace(/\s+/g,'_')}_${weekStart}_${weekEnd}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast(`STP2 report generated — ${payeeRecords.length} employee${payeeRecords.length !== 1 ? 's' : ''} ✓`);
+
+    // Also show summary modal
+    showSTP2Summary(payload);
+
+  } catch (err) {
+    console.error('STP2 generation error:', err);
+    toast('Error generating STP2 report: ' + err.message);
+  } finally {
+    if (btn) { btn.textContent = '📤 Export STP2'; btn.disabled = false; }
+  }
+}
+
+// ── Show STP2 summary modal after generation
+function showSTP2Summary(payload) {
+  const modal = document.getElementById('stp2-modal');
+  if (!modal) return;
+
+  const s = payload.summary;
+  document.getElementById('stp2-summary').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
+      <div class="kpi"><div class="kpi-label">Employees</div><div class="kpi-value">${s.totalPayees}</div></div>
+      <div class="kpi"><div class="kpi-label">Total Gross</div><div class="kpi-value">${fmt(s.totalGross)}</div></div>
+      <div class="kpi"><div class="kpi-label">Tax Withheld</div><div class="kpi-value negative">${fmt(s.totalTax)}</div></div>
+      <div class="kpi"><div class="kpi-label">Super</div><div class="kpi-value">${fmt(s.totalSuper)}</div></div>
+    </div>
+    <div style="padding:14px;background:rgba(56,161,105,.08);border-radius:8px;border:1px solid rgba(56,161,105,.2);font-size:13px;">
+      <div style="font-weight:700;color:var(--success);margin-bottom:8px;">✓ STP2 file downloaded</div>
+      <div style="color:var(--text2);line-height:1.6;">
+        Submit this JSON file to the ATO via:<br>
+        • <strong>ATO Business Portal</strong> — business.gov.au<br>
+        • <strong>Your registered tax agent</strong><br>
+        • <strong>ATO Free Clearing House</strong> — for businesses with ≤19 employees
+      </div>
+    </div>
+    <div style="margin-top:14px;padding:12px 14px;background:rgba(232,197,71,.08);border-radius:8px;border:1px solid var(--accent2);font-size:12px;color:var(--text2);">
+      ⚠ Ensure all employees have their <strong>Super Fund USI</strong> entered before submitting.
+      Missing USI will cause ATO validation errors.
+    </div>
+  `;
+
+  modal.classList.add('show');
+}
+
+// ── Check STP2 readiness for employees
+function checkSTP2Readiness() {
+  const issues = [];
+  employees.filter(e => e.active !== false).forEach(emp => {
+    const empIssues = [];
+    if (!emp.tfn)               empIssues.push('TFN missing');
+    if (!emp.super_fund)        empIssues.push('Super fund missing');
+    if (!emp.super_fund_usi)    empIssues.push('Super fund USI missing');
+    if (!emp.super_member_number) empIssues.push('Super member number missing');
+    if (empIssues.length) {
+      issues.push({ name: `${emp.first_name} ${emp.last_name}`, issues: empIssues });
+    }
+  });
+  return issues;
+}
+
+// ── Show STP2 readiness check
+function showSTP2Readiness() {
+  const issues = checkSTP2Readiness();
+  const modal  = document.getElementById('stp2-modal');
+  if (!modal) return;
+
+  if (!issues.length) {
+    document.getElementById('stp2-summary').innerHTML = `
+      <div style="padding:20px;text-align:center;">
+        <div style="font-size:48px;margin-bottom:12px;">✓</div>
+        <div style="font-weight:700;font-size:16px;color:var(--success);margin-bottom:8px;">All employees STP2 ready</div>
+        <div style="font-size:13px;color:var(--text2);">All active employees have the required TFN, super fund and USI details.</div>
+      </div>`;
+  } else {
+    document.getElementById('stp2-summary').innerHTML = `
+      <div style="font-weight:700;font-size:14px;margin-bottom:14px;color:var(--danger);">
+        ⚠ ${issues.length} employee${issues.length !== 1 ? 's' : ''} need${issues.length === 1 ? 's' : ''} attention
+      </div>
+      ${issues.map(i => `
+        <div style="padding:12px;background:var(--surface2);border-radius:8px;margin-bottom:8px;border-left:3px solid var(--danger);">
+          <div style="font-weight:600;font-size:13px;margin-bottom:4px;">${i.name}</div>
+          ${i.issues.map(iss => `<div style="font-size:12px;color:var(--danger);">• ${iss}</div>`).join('')}
+        </div>`).join('')}
+      <div style="margin-top:14px;font-size:12px;color:var(--text3);">
+        Go to Employees → Edit each employee to add missing details.
+      </div>`;
+  }
+  modal.classList.add('show');
+}
