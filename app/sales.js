@@ -3,7 +3,23 @@
    sales.js
 ══════════════════════════════════════════════════════ */
 
-// salesData keyed by date: { projected, actual, target_spch }
+// ── Business Supabase client (for mirroring actual sales)
+// Uses Business project credentials directly — anon key + RLS is sufficient
+const _BIZ_SUPABASE_URL  = 'https://vyikolyljzygmxiahcul.supabase.co';
+const _BIZ_SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5aWtvbHlsanp5Z214aWFoY3VsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3NzMyNDQsImV4cCI6MjA5MDM0OTI0NH0.v75aCYpDGlUgnaNFj3JE_clvVxmt2YAA_I9AYFABZII';
+let _bizSupabase = null; // initialised lazily on first mirror attempt
+
+function getBizSupabase() {
+  if (!_bizSupabase && typeof supabase !== 'undefined') {
+    _bizSupabase = supabase.createClient(_BIZ_SUPABASE_URL, _BIZ_SUPABASE_ANON);
+  }
+  return _bizSupabase;
+}
+
+// Linked Business account ID — set from businesses.linked_business_id
+let _linkedBusinessId = null;
+
+// salesData keyed by date: { projected, actual, target_spch, food, beverage, other }
 let salesData = JSON.parse(localStorage.getItem('wf_sales') || '{}');
 
 // ══════════════════════════════════════════════════════
@@ -47,9 +63,12 @@ async function dbLoadSalesRange(from, to) {
   if (error) { console.error('Load sales failed:', error); return; }
   (data || []).forEach(r => {
     if (!salesData[r.date]) salesData[r.date] = {};
-    salesData[r.date].projected   = r.projected   ?? null;
-    salesData[r.date].actual      = r.actual      ?? null;
-    salesData[r.date].target_spch = r.target_spch ?? null;
+    salesData[r.date].projected   = r.projected    ?? null;
+    salesData[r.date].actual      = r.actual       ?? null;
+    salesData[r.date].target_spch = r.target_spch  ?? null;
+    salesData[r.date].food        = r.food         ?? null;
+    salesData[r.date].beverage    = r.beverage     ?? null;
+    salesData[r.date].other       = r.other_revenue ?? null;
   });
   localStorage.setItem('wf_sales', JSON.stringify(salesData));
 }
@@ -58,13 +77,68 @@ async function dbSaveSale(date) {
   const d = salesData[date];
   if (!_businessId) return;
   const { error } = await _supabase.from('sales_data').upsert({
-    business_id: _businessId,
+    business_id:   _businessId,
     date,
-    projected:   d?.projected   ?? null,
-    actual:      d?.actual      ?? null,
-    target_spch: d?.target_spch ?? null,
+    projected:     d?.projected    ?? null,
+    actual:        d?.actual       ?? null,
+    target_spch:   d?.target_spch  ?? null,
+    food:          d?.food         ?? null,
+    beverage:      d?.beverage     ?? null,
+    other_revenue: d?.other        ?? null,
   }, { onConflict: 'business_id,date' });
   if (error) console.error('Save sales failed:', error);
+
+  // Mirror actual sales to Business if linked and actual is set
+  if (d?.actual != null && _linkedBusinessId) {
+    await dbMirrorSalesToBusiness(date);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  MIRROR SALES TO TAYLA BUSINESS
+//  Writes actual daily sales to the Business Supabase
+//  project so the Stocktake module can calculate UPT.
+//  Only runs when a Business account is linked.
+// ══════════════════════════════════════════════════════
+
+async function dbMirrorSalesToBusiness(date) {
+  if (!_linkedBusinessId) return;
+  const biz = getBizSupabase();
+  if (!biz) return;
+
+  const d = salesData[date];
+  if (d?.actual == null) return; // only mirror when actual is set
+
+  const food      = d.food      ?? null;
+  const beverage  = d.beverage  ?? null;
+  const other     = d.other     ?? null;
+  const total     = d.actual;
+
+  // Validate: if breakdown is entered, it should sum to actual (allow small rounding diff)
+  const breakdownTotal = (food || 0) + (beverage || 0) + (other || 0);
+  const hasBreakdown   = food != null || beverage != null || other != null;
+  if (hasBreakdown && Math.abs(breakdownTotal - total) > 1) {
+    console.warn(`Sales breakdown (${breakdownTotal}) doesn't match actual (${total}) for ${date} — mirroring anyway`);
+  }
+
+  const { error } = await biz.from('sales_summary').upsert({
+    id:                   `${_linkedBusinessId}_${date}`,
+    business_id:          _linkedBusinessId,
+    workforce_business_id: _businessId,
+    date,
+    total_revenue:        total,
+    food_revenue:         food,
+    beverage_revenue:     beverage,
+    other_revenue:        other,
+    source:               'workforce_manual',
+    updated_at:           new Date().toISOString(),
+  }, { onConflict: 'id' });
+
+  if (error) {
+    console.error('Mirror to Business failed:', error);
+  } else {
+    console.log(`Sales mirrored to Business for ${date}: $${total}`);
+  }
 }
 
 // ══════════════════════════════════════════════════════
@@ -334,6 +408,54 @@ function renderSalesDayPanel(date) {
             ${actual!=null && proj ? `<div style="font-size:10px;margin-top:4px;color:${actual>=proj?'var(--success)':'var(--danger)'};">${actual>=proj?'▲':'▼'} ${Math.abs(((actual-proj)/proj)*100).toFixed(1)}% vs projection</div>` : ''}
           </div>
 
+          <!-- Sales breakdown — food / beverage / other -->
+          <div style="margin-top:2px;padding:12px 14px;background:var(--surface2);border-radius:10px;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:10px;">
+              Sales Breakdown
+              <span style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3);"> — optional, used for UPT calculation</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+              <div>
+                <label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);display:block;margin-bottom:4px;">Food ($)</label>
+                <div style="position:relative;">
+                  <span class="field-prefix" style="font-size:11px;">$</span>
+                  <input type="number" id="input-food-${date}" class="sales-input"
+                    placeholder="0" value="${sd.food??''}" min="0" step="10"
+                    ${isHeadOfficeAgg ? 'readonly style="background:var(--surface2);cursor:not-allowed;"' : ''}
+                    onchange="saveSalesField('${date}','food',this.value)">
+                </div>
+              </div>
+              <div>
+                <label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);display:block;margin-bottom:4px;">Beverage ($)</label>
+                <div style="position:relative;">
+                  <span class="field-prefix" style="font-size:11px;">$</span>
+                  <input type="number" id="input-beverage-${date}" class="sales-input"
+                    placeholder="0" value="${sd.beverage??''}" min="0" step="10"
+                    ${isHeadOfficeAgg ? 'readonly style="background:var(--surface2);cursor:not-allowed;"' : ''}
+                    onchange="saveSalesField('${date}','beverage',this.value)">
+                </div>
+              </div>
+              <div>
+                <label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);display:block;margin-bottom:4px;">Other ($)</label>
+                <div style="position:relative;">
+                  <span class="field-prefix" style="font-size:11px;">$</span>
+                  <input type="number" id="input-other-${date}" class="sales-input"
+                    placeholder="0" value="${sd.other??''}" min="0" step="10"
+                    ${isHeadOfficeAgg ? 'readonly style="background:var(--surface2);cursor:not-allowed;"' : ''}
+                    onchange="saveSalesField('${date}','other',this.value)">
+                </div>
+              </div>
+            </div>
+            ${(sd.food||0)+(sd.beverage||0)+(sd.other||0) > 0 ? `
+              <div style="margin-top:8px;font-size:11px;color:var(--text3);text-align:right;">
+                Breakdown total: <strong style="color:var(--text2);">$${((sd.food||0)+(sd.beverage||0)+(sd.other||0)).toFixed(0)}</strong>
+                ${actual && Math.abs(((sd.food||0)+(sd.beverage||0)+(sd.other||0))-actual) > 1
+                  ? `<span style="color:var(--warning);margin-left:6px;">⚠ differs from actual by $${Math.abs(((sd.food||0)+(sd.beverage||0)+(sd.other||0))-actual).toFixed(0)}</span>`
+                  : `<span style="color:var(--success);margin-left:6px;">✓ matches actual</span>`
+                }
+              </div>` : ''}
+          </div>
+
           <!-- Target SPCH -->
           <div class="sales-field-row">
             <label>Target SPCH <span style="font-size:10px;color:var(--text3);font-weight:400;">$/crew hr</span></label>
@@ -505,6 +627,23 @@ async function saveSalesField(date, field, value) {
   }
   if (!salesData[date]) salesData[date] = {};
   salesData[date][field] = value === '' ? null : parseFloat(value) || null;
+
+  // If a breakdown field changed, auto-update the actual total if not manually set
+  if (['food','beverage','other'].includes(field)) {
+    const d = salesData[date];
+    const breakdownTotal = (d.food || 0) + (d.beverage || 0) + (d.other || 0);
+    // Only auto-fill actual if it's not already manually set or if it equals a previous breakdown total
+    if (breakdownTotal > 0) {
+      const currentActual = document.getElementById(`input-actual-${date}`)?.value;
+      // Auto-fill actual from breakdown sum for convenience — user can override
+      if (!currentActual || parseFloat(currentActual) === 0) {
+        salesData[date].actual = breakdownTotal;
+        const actualEl = document.getElementById(`input-actual-${date}`);
+        if (actualEl) actualEl.value = breakdownTotal;
+      }
+    }
+  }
+
   localStorage.setItem('wf_sales', JSON.stringify(salesData));
   await dbSaveSale(date);
   renderSalesKPIs(getWeekDates(_salesWeekStart));
