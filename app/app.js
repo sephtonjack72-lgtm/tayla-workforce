@@ -263,6 +263,11 @@ function showInviteErrorScreen() {
 async function applyProfile(profile) {
   _businessId = profile.id;
 
+  // Set linked Business account ID for sales mirroring
+  if (typeof _linkedBusinessId !== 'undefined') {
+    _linkedBusinessId = profile.linked_business_id || null;
+  }
+
   const nameEl = document.getElementById('header-biz-name');
   if (nameEl) nameEl.textContent = profile.biz_name || 'My Business';
 
@@ -627,6 +632,8 @@ function openAccountSettings(tab = 'profile') {
   document.getElementById('biz-phone-input').value        = _businessProfile?.phone          || '';
   document.getElementById('biz-bsb-input').value          = _businessProfile?.bank_bsb       || '';
   document.getElementById('biz-bank-account-input').value = _businessProfile?.bank_account   || '';
+  const linkedEl = document.getElementById('biz-linked-business-input');
+  if (linkedEl) linkedEl.value = _businessProfile?.linked_business_id || '';
 
   switchAcctTab(tab);
   document.getElementById('account-modal')?.classList.add('show');
@@ -703,18 +710,60 @@ async function saveBusinessSettings() {
     phone:             document.getElementById('biz-phone-input').value.trim(),
     bank_bsb:          document.getElementById('biz-bsb-input').value.trim(),
     bank_account:      document.getElementById('biz-bank-account-input').value.trim(),
+    linked_business_id: document.getElementById('biz-linked-business-input')?.value.trim() || null,
   };
 
   const { error } = await _supabase.from('businesses').update(updates).eq('id', _businessId);
   if (error) { msgEl.textContent = error.message; return; }
 
   _businessProfile = { ..._businessProfile, ...updates };
+  // Update linked business ID in sales module
+  if (typeof _linkedBusinessId !== 'undefined') {
+    _linkedBusinessId = updates.linked_business_id || null;
+  }
   const nameEl = document.getElementById('header-biz-name');
   if (nameEl) nameEl.textContent = updates.biz_name || 'My Business';
 
   msgEl.style.color = 'var(--success)';
   msgEl.textContent = '✓ Business settings saved';
   setTimeout(() => { msgEl.textContent = ''; }, 3000);
+}
+
+async function testBusinessLink() {
+  const linkedId = document.getElementById('biz-linked-business-input')?.value.trim();
+  const statusEl = document.getElementById('biz-link-status');
+  if (!statusEl) return;
+
+  if (!linkedId) {
+    statusEl.style.color = 'var(--danger)';
+    statusEl.textContent = 'Enter a Business ID to test';
+    return;
+  }
+
+  statusEl.style.color = 'var(--text3)';
+  statusEl.textContent = 'Testing connection…';
+
+  try {
+    const _BIZ_URL  = 'https://vyikolyljzygmxiahcul.supabase.co';
+    const _BIZ_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5aWtvbHlsanp5Z214aWFoY3VsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3NzMyNDQsImV4cCI6MjA5MDM0OTI0NH0.v75aCYpDGlUgnaNFj3JE_clvVxmt2YAA_I9AYFABZII';
+    const client = supabase.createClient(_BIZ_URL, _BIZ_ANON);
+    const { data, error } = await client
+      .from('businesses')
+      .select('biz_name')
+      .eq('id', linkedId)
+      .maybeSingle();
+
+    if (error || !data) {
+      statusEl.style.color = 'var(--danger)';
+      statusEl.textContent = '✕ Business ID not found — check you copied it correctly';
+    } else {
+      statusEl.style.color = 'var(--success)';
+      statusEl.textContent = `✓ Connected to "${data.biz_name}" — save to activate`;
+    }
+  } catch (e) {
+    statusEl.style.color = 'var(--danger)';
+    statusEl.textContent = '✕ Connection failed — check your internet and try again';
+  }
 }
 
 // ══════════════════════════════════════════════════════
