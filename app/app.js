@@ -880,13 +880,30 @@ async function loadFranchiseList() {
   }
 
   el.innerHTML = _franchises.map(f => `
-    <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
-      <div class="avatar" style="width:32px;height:32px;font-size:12px;flex-shrink:0;">📍</div>
-      <div style="flex:1;min-width:0;">
-        <div style="font-weight:600;font-size:13px;">${f.biz_name}</div>
-        <div style="font-size:11px;color:var(--text3);">${f.abn ? 'ABN: ' + f.abn + ' · ' : ''}${f.address || ''}</div>
+    <div style="padding:14px 0;border-bottom:1px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+        <div class="avatar" style="width:32px;height:32px;font-size:12px;flex-shrink:0;">📍</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:13px;">${f.biz_name}</div>
+          <div style="font-size:11px;color:var(--text3);">${f.abn ? 'ABN: ' + f.abn + ' · ' : ''}${f.address || ''}</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="inviteToFranchise('${f.id}','${f.biz_name.replace(/'/g,"\\'")}')">Invite User</button>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="inviteToFranchise('${f.id}','${f.biz_name.replace(/'/g,"\\'")}')">Invite User</button>
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);">
+        <div style="flex:1;">
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:2px;">Business Connector Code</div>
+          <div style="font-size:13px;font-family:monospace;font-weight:600;color:var(--accent2);">
+            ${f.business_connector_code || '<span style="color:var(--text3);font-weight:400;">Not generated — re-save franchise to generate</span>'}
+          </div>
+        </div>
+        ${f.business_connector_code ? `
+          <button class="btn btn-ghost btn-sm" style="flex-shrink:0;" onclick="navigator.clipboard.writeText('${f.business_connector_code}').then(()=>toast('Code copied ✓'))">
+            Copy
+          </button>` : ''}
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px;padding:0 2px;">
+        The franchise owner enters this code in Tayla Business → Settings → Franchise Setup to link their Business account.
+      </div>
     </div>
   `).join('');
 }
@@ -899,13 +916,17 @@ async function createFranchise() {
 
   const parentId = _ownerBusinessId || _businessId;
 
+  // Generate a unique connector code — TF- + 6 random alphanumeric chars
+  const connectorCode = 'TF-' + Math.random().toString(36).toUpperCase().slice(2, 8);
+
   const { data, error } = await _supabase.from('businesses').insert({
-    user_id:            _currentUser.id,
-    biz_name:           name,
+    user_id:                _currentUser.id,
+    biz_name:               name,
     abn,
     address,
-    parent_business_id: parentId,
-    created_at:         new Date().toISOString(),
+    parent_business_id:     parentId,
+    business_connector_code: connectorCode,
+    created_at:             new Date().toISOString(),
   }).select().single();
 
   if (error) { toast('Error: ' + error.message); return; }
@@ -920,7 +941,7 @@ async function createFranchise() {
     accepted_at:  new Date().toISOString(),
   });
 
-  toast(`${name} created ✓`);
+  toast(`${name} created ✓ · Connector code: ${connectorCode}`);
   document.getElementById('franchise-name').value    = '';
   document.getElementById('franchise-abn').value     = '';
   document.getElementById('franchise-address').value = '';
