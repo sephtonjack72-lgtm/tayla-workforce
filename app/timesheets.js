@@ -287,51 +287,14 @@ async function approveAllPending() {
 //  PUSH PAYSLIPS — PREVIOUS WEEK (BULK)
 // ══════════════════════════════════════════════════════
 
-// ══════════════════════════════════════════════════════
-//  PUSH PAYSLIPS — PAY PERIOD (BULK)
-// ══════════════════════════════════════════════════════
-
-function getPayPeriodRange() {
-  const freq      = (typeof _payFrequency !== 'undefined' ? _payFrequency : null) || _businessProfile?.pay_frequency || 'weekly';
-  const weekStart = getTsWeekStart();
-
-  if (freq === 'fortnightly') {
-    // Current week + next week (Mon–Sun fortnight starting from selected week)
-    const start    = weekStart;
-    const startObj = parseLocalDate(start);
-    const endObj   = new Date(startObj);
-    endObj.setDate(startObj.getDate() + 13);
-    const end   = localDateStr(endObj);
-    // Build all 14 dates
-    const dates = Array.from({ length: 14 }, (_, i) => {
-      const d = new Date(startObj);
-      d.setDate(startObj.getDate() + i);
-      return localDateStr(d);
-    });
-    return { prevStart: start, prevEnd: end, prevDates: dates };
-  }
-
-  if (freq === 'monthly') {
-    // Calendar month containing the selected week start
-    const d     = parseLocalDate(weekStart);
-    const start = localDateStr(new Date(d.getFullYear(), d.getMonth(), 1));
-    const end   = localDateStr(new Date(d.getFullYear(), d.getMonth() + 1, 0));
-    // Build all dates in month
-    const startObj = parseLocalDate(start);
-    const endObj   = parseLocalDate(end);
-    const dates    = [];
-    const cur      = new Date(startObj);
-    while (cur <= endObj) { dates.push(localDateStr(cur)); cur.setDate(cur.getDate() + 1); }
-    return { prevStart: start, prevEnd: end, prevDates: dates };
-  }
-
-  // Weekly (default)
-  const weekDates = getWeekDates(weekStart);
-  return { prevStart: weekStart, prevEnd: weekDates[6], prevDates: weekDates };
+function getPreviousWeekRange() {
+  const weekDates = getWeekDates(getTsWeekStart());
+  return {
+    prevStart: getTsWeekStart(),
+    prevEnd:   weekDates[6],
+    prevDates: weekDates,
+  };
 }
-
-// Keep old name as alias for any other callers
-function getPreviousWeekRange() { return getPayPeriodRange(); }
 
 async function openPushPayslipsModal() {
   const { prevStart, prevEnd, prevDates } = getPreviousWeekRange();
@@ -343,8 +306,7 @@ async function openPushPayslipsModal() {
   const modal = document.getElementById('push-payslips-modal');
   if (!modal) return;
 
-  const freqLabel   = { weekly: 'Weekly', fortnightly: 'Fortnightly', monthly: 'Monthly' }[_payFrequency || 'weekly'] || 'Weekly';
-  const periodLabel = `${freqLabel} · ${parseLocalDate(prevStart).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} — ${parseLocalDate(prevEnd).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  const periodLabel = `${parseLocalDate(prevStart).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} — ${parseLocalDate(prevEnd).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
 
   // Build preview rows
   const rows = activeEmps.map(emp => {
@@ -442,10 +404,9 @@ async function executePushPayslips() {
       const grossPay     = +shiftBreakdown.reduce((s, r) => s + r.pay.grossPay, 0).toFixed(2);
       const laundryAllow = +shiftBreakdown.reduce((s, r) => s + r.pay.laundryAllowance, 0).toFixed(2);
       const totalGross   = +(grossPay + laundryAllow).toFixed(2);
-      const ppy          = typeof getPeriodsPerYear === 'function' ? getPeriodsPerYear(_payFrequency || 'weekly') : 52;
-      const paygWithheld = calcPAYG(totalGross, emp.tax_free_threshold !== false, emp.residency_status || 'australian', ppy);
-      const medicare     = calcMedicare(totalGross, emp.residency_status || 'australian', ppy);
-      const hecsRepay    = emp.hecs_help ? calcHECSRepayment(totalGross, ppy) : 0;
+      const paygWithheld = calcPAYG(totalGross, emp.tax_free_threshold !== false, emp.residency_status || 'australian');
+      const medicare     = calcMedicare(totalGross, emp.residency_status || 'australian');
+      const hecsRepay    = emp.hecs_help ? calcHECSRepayment(totalGross) : 0;
       const totalTax     = paygWithheld + medicare + hecsRepay;
       const superAmount  = calcSuper(grossPay);
       const netPay       = +(totalGross - totalTax).toFixed(2);
@@ -545,4 +506,72 @@ async function executePushPayslips() {
 
   btn.textContent = 'Done';
   toast(`Payslips pushed: ${sent} sent${failed ? ', ' + failed + ' failed' : ''}`);
+
+  // Push payroll journal to Tayla Business if linked
+  if (sent > 0) {
+    await pushPayrollToBusiness(prevStart, prevEnd, activeEmps);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  PUSH PAYROLL TO TAYLA BUSINESS
+//  Fires after payslips are pushed to create journal entries
+// ══════════════════════════════════════════════════════
+
+async function pushPayrollToBusiness(periodStart, periodEnd, activeEmps) {
+  const linkedBizId = _businessProfile?.linked_business_id;
+  if (!linkedBizId) return; // Not linked — skip silently
+
+  try {
+    // Fetch the payslips we just saved for this period
+    const { data: payslipRows } = await _supabase
+      .from('payslips')
+      .select('employee_id, gross_pay, tax_withheld, medicare_levy, hecs_repayment, super_amount, net_pay')
+      .eq('business_id', _businessId)
+      .gte('pay_period_start', periodStart)
+      .lte('pay_period_end', periodEnd);
+
+    if (!payslipRows?.length) return;
+
+    // Build payload with employee names for the narration
+    const payslips = payslipRows.map(p => {
+      const emp = activeEmps.find(e => e.id === p.employee_id);
+      return {
+        employee_name:  emp ? `${emp.first_name} ${emp.last_name}` : p.employee_id,
+        gross_pay:      p.gross_pay      || 0,
+        tax_withheld:   p.tax_withheld   || 0,
+        medicare_levy:  p.medicare_levy  || 0,
+        hecs_repayment: p.hecs_repayment || 0,
+        super_amount:   p.super_amount   || 0,
+        net_pay:        p.net_pay        || 0,
+      };
+    });
+
+    const payDateObj = new Date(periodEnd);
+    payDateObj.setDate(payDateObj.getDate() + 1);
+    const paymentDate = localDateStr(payDateObj);
+
+    const res = await fetch(
+      'https://vyikolyljzygmxiahcul.supabase.co/functions/v1/receive-payroll',
+      {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workforce_business_id: _businessId,
+          pay_period_start:      periodStart,
+          pay_period_end:        periodEnd,
+          payment_date:          paymentDate,
+          payslips,
+        }),
+      }
+    );
+
+    const data = await res.json();
+    if (data.success && !data.skipped) {
+      toast(`Journal entry created in Tayla Business ✓ (${data.ref})`);
+    }
+  } catch (err) {
+    console.error('Business payroll push failed:', err);
+    // Non-fatal — don't block payslip push result
+  }
 }
