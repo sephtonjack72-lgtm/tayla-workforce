@@ -1362,6 +1362,10 @@ async function getBillingStatus() {
   if (status === 'trial' && trialEnd && now > trialEnd) return 'trial_expired';
   // Check if grace period has expired
   if (status === 'grace' && graceEnd && now > graceEnd) return 'locked';
+  // Cancellation pending — access continues until period end
+  if (status === 'cancellation_pending') return 'cancellation_pending';
+  // Fully cancelled — read-only mode
+  if (status === 'cancelled') return 'cancelled';
   return status;
 }
 
@@ -1596,7 +1600,13 @@ async function loadBillingPanel() {
     cancelled: {
       badge: '✕ Cancelled',
       color: 'var(--text3)',
-      detail: periodEnd ? `Access continues until <strong>${fmt(periodEnd)}</strong>.` : 'Your subscription has been cancelled.',
+      detail: periodEnd ? `Your subscription has ended. Data retained for compliance. Reactivate to restore access.` : 'Your subscription has been cancelled.',
+      showSub: true, showPortal: false,
+    },
+    cancellation_pending: {
+      badge: '⚠ Cancelling',
+      color: '#d97706',
+      detail: periodEnd ? `Your subscription is cancelled but you retain full access until <strong>${fmt(periodEnd)}</strong>. Reactivate anytime.` : 'Your subscription will cancel at the end of your billing period.',
       showSub: true, showPortal: true,
     },
   };
@@ -1687,6 +1697,18 @@ function showBillingBanner() {
       msg = '🔒 Your account is locked due to non-payment. Subscribe to restore access.';
       bgColor = 'var(--danger)';
       if (btn) btn.textContent = 'Subscribe Now';
+    } else if (status === 'cancellation_pending') {
+      const periodEnd = _businessProfile?.current_period_end ? new Date(_businessProfile.current_period_end) : null;
+      const endStr    = periodEnd ? periodEnd.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' }) : 'your billing period end';
+      show    = true;
+      msg     = `Your subscription is cancelled — you have full access until ${endStr}. Reactivate anytime to continue.`;
+      bgColor = '#d97706';
+      if (btn) btn.textContent = 'Reactivate';
+    } else if (status === 'cancelled') {
+      show    = true;
+      msg     = '📋 Your subscription has ended. Your data is retained for compliance. Reactivate to restore full access.';
+      bgColor = 'var(--danger)';
+      if (btn) btn.textContent = 'Reactivate';
     }
 
     if (show) {
