@@ -1259,9 +1259,14 @@ async function loadBillingPanel() {
   const periodEnd = _businessProfile?.current_period_end ? new Date(_businessProfile.current_period_end) : null;
 
   // Count employees and franchises for cost breakdown
-  const empCount      = (typeof employees !== 'undefined') ? employees.length : 0;
+  const empCount       = (typeof employees !== 'undefined') ? employees.filter(e => e.active !== false).length : 0;
   const franchiseCount = _franchises?.length || 0;
-  const monthlyCost   = (empCount * 4) + (franchiseCount * 2);
+
+  // Tiered base fee
+  const baseFee  = empCount <= 15 ? 29 : empCount <= 50 ? 59 : 79;
+  const tierName = empCount <= 15 ? 'Starter' : empCount <= 50 ? 'Growth' : 'Enterprise';
+  const tierDesc = empCount <= 15 ? 'up to 15 employees' : empCount <= 50 ? '16–50 employees' : '50+ employees';
+  const monthlyCost = baseFee + (empCount * 6) + (franchiseCount * 10);
 
   // Breakdown
   if (breakdownEl) {
@@ -1269,13 +1274,17 @@ async function loadBillingPanel() {
       <div style="background:var(--surface2);border-radius:10px;padding:16px;border:1px solid var(--border);">
         <div style="font-weight:700;font-size:13px;margin-bottom:12px;">Monthly Cost Breakdown</div>
         <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border);">
-          <span>${empCount} employees × $4.00</span>
-          <span style="font-weight:600;">$${(empCount * 4).toFixed(2)}</span>
+          <span>${tierName} plan <span style="color:var(--text3);font-size:11px;">(${tierDesc})</span></span>
+          <span style="font-weight:600;">$${baseFee.toFixed(2)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border);">
+          <span>${empCount} employee${empCount !== 1 ? 's' : ''} × $6.00</span>
+          <span style="font-weight:600;">$${(empCount * 6).toFixed(2)}</span>
         </div>
         ${franchiseCount > 0 ? `
         <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border);">
-          <span>${franchiseCount} franchise${franchiseCount > 1 ? 's' : ''} × $2.00</span>
-          <span style="font-weight:600;">$${(franchiseCount * 2).toFixed(2)}</span>
+          <span>${franchiseCount} franchise${franchiseCount > 1 ? 's' : ''} × $10.00</span>
+          <span style="font-weight:600;">$${(franchiseCount * 10).toFixed(2)}</span>
         </div>` : ''}
         <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;padding:8px 0;color:var(--accent);">
           <span>Total per month</span>
