@@ -4,15 +4,16 @@
    payg.js
 ══════════════════════════════════════════════════════ */
 
-function calcPAYG(weeklyGross, taxFreeThreshold = true, residency = 'australian') {
-  if (residency === 'foreign')          return calcPAYGForeign(weeklyGross);
-  if (residency === 'working_holiday')  return calcPAYGWorkingHoliday(weeklyGross);
-  return calcPAYGResident(weeklyGross, taxFreeThreshold);
+// periodsPerYear: 52 = weekly, 26 = fortnightly, 12 = monthly
+function calcPAYG(periodGross, taxFreeThreshold = true, residency = 'australian', periodsPerYear = 52) {
+  if (residency === 'foreign')          return calcPAYGForeign(periodGross, periodsPerYear);
+  if (residency === 'working_holiday')  return calcPAYGWorkingHoliday(periodGross, periodsPerYear);
+  return calcPAYGResident(periodGross, taxFreeThreshold, periodsPerYear);
 }
 
 // Australian resident (tax-free threshold applies when claimed)
-function calcPAYGResident(weekly, taxFreeThreshold) {
-  const annual = weekly * 52;
+function calcPAYGResident(periodGross, taxFreeThreshold, periodsPerYear = 52) {
+  const annual = periodGross * periodsPerYear;
   let tax = 0;
 
   if (taxFreeThreshold) {
@@ -37,43 +38,43 @@ function calcPAYGResident(weekly, taxFreeThreshold) {
   else if (annual <= 66667)     lito = 325 - (annual - 45000) * 0.015;
 
   tax = Math.max(0, tax - lito);
-  return Math.round(tax / 52);
+  return Math.round(tax / periodsPerYear);
 }
 
 // Foreign resident
-function calcPAYGForeign(weekly) {
-  const annual = weekly * 52;
+function calcPAYGForeign(periodGross, periodsPerYear = 52) {
+  const annual = periodGross * periodsPerYear;
   let tax = 0;
   if (annual <= 135000)         tax = annual * 0.30;
   else if (annual <= 190000)    tax = 40500 + (annual - 135000) * 0.37;
   else                          tax = 60850 + (annual - 190000) * 0.45;
-  return Math.round(tax / 52);
+  return Math.round(tax / periodsPerYear);
 }
 
 // Working holiday maker
-function calcPAYGWorkingHoliday(weekly) {
-  const annual = weekly * 52;
+function calcPAYGWorkingHoliday(periodGross, periodsPerYear = 52) {
+  const annual = periodGross * periodsPerYear;
   let tax = 0;
   if (annual <= 45000)          tax = annual * 0.15;
   else if (annual <= 135000)    tax = 6750 + (annual - 45000) * 0.30;
   else if (annual <= 190000)    tax = 33750 + (annual - 135000) * 0.37;
   else                          tax = 54100 + (annual - 190000) * 0.45;
-  return Math.round(tax / 52);
+  return Math.round(tax / periodsPerYear);
 }
 
 // Medicare levy — 2% for residents earning above threshold
-function calcMedicare(weeklyGross, residency = 'australian') {
+function calcMedicare(periodGross, residency = 'australian', periodsPerYear = 52) {
   if (residency !== 'australian') return 0;
-  const annual = weeklyGross * 52;
+  const annual = periodGross * periodsPerYear;
   if (annual <= 26000) return 0;
-  return Math.round(weeklyGross * 0.02);
+  return Math.round(periodGross * 0.02);
 }
 
 // HECS/HELP repayment — ATO 2025-26 compulsory repayment thresholds
 // Applied on top of PAYG withholding when employee has a study/training loan
 // Reference: ato.gov.au/tax-rates-and-codes/tax-rates-study-and-training-loans
-function calcHECSRepayment(weeklyGross) {
-  const annual = weeklyGross * 52;
+function calcHECSRepayment(periodGross, periodsPerYear = 52) {
+  const annual = periodGross * periodsPerYear;
   let rate = 0;
 
   // 2025-26 HECS/HELP repayment rates
@@ -98,10 +99,17 @@ function calcHECSRepayment(weeklyGross) {
   else                      rate = 0.100;
 
   if (rate === 0) return 0;
-  return Math.round((annual * rate) / 52);
+  return Math.round((annual * rate) / periodsPerYear);
 }
 
 // Superannuation — 12% of ordinary time earnings (FY2025-26)
-function calcSuper(weeklyGross) {
-  return +(weeklyGross * 0.12).toFixed(2);
+function calcSuper(periodGross) {
+  return +(periodGross * 0.12).toFixed(2);
+}
+
+// Helper: get periods per year from pay frequency string
+function getPeriodsPerYear(payFrequency) {
+  if (payFrequency === 'fortnightly') return 26;
+  if (payFrequency === 'monthly')     return 12;
+  return 52; // weekly default
 }
