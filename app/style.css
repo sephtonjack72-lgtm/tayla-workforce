@@ -1771,3 +1771,38 @@ main {
   max-width: 600px;
   margin: 0 auto;
 }
+
+/* ══════════════════════════════════════════════════════
+   PWA Mode — installed app view
+   Only Dashboard + Clock In visible
+   Clean, tablet-optimised layout
+══════════════════════════════════════════════════════ */
+
+body.pwa-mode header {
+  /* Slightly taller touch target */
+  min-height: 60px;
+}
+
+body.pwa-mode .logo-sub {
+  /* Show business name prominently in PWA */
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: rgba(255,255,255,.6);
+}
+
+/* Dashboard in PWA — hide analytics, keep shifts only */
+body.pwa-mode #dash-kpis { display: none !important; }
+body.pwa-mode #franchise-analytics { display: none !important; }
+body.pwa-mode .analytics-subnav { display: none !important; }
+body.pwa-mode #sales-chart-wrap { display: none !important; }
+
+/* Clock In page in PWA — more breathing room */
+body.pwa-mode #clockin-content {
+  padding-top: 8px;
+}
+
+body.pwa-mode #clockin-content input {
+  font-size: 18px !important;
+  padding: 16px 18px;
+}
