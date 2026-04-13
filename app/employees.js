@@ -143,7 +143,6 @@ function openEditEmployee(id) {
   document.getElementById('emp-super-fund').value   = e.super_fund || '';
   document.getElementById('emp-super-usi').value    = e.super_fund_usi || '';
   document.getElementById('emp-super-number').value = e.super_member_number || '';
-  document.getElementById('emp-super-fund-abn').value = e.super_fund_abn || '';
   document.getElementById('emp-bank-bsb').value     = e.bank_bsb   || '';
   document.getElementById('emp-bank-account').value = e.bank_account || '';
   document.getElementById('emp-start-date').value   = e.start_date || '';
@@ -151,7 +150,6 @@ function openEditEmployee(id) {
   document.getElementById('emp-active').value       = String(e.active !== false);
   document.getElementById('emp-tax-free').value     = String(e.tax_free_threshold !== false);
   document.getElementById('emp-residency').value    = e.residency_status || 'australian';
-  document.getElementById('emp-hecs-help').value    = String(e.hecs_help || false);
   // STP2 fields
   document.getElementById('emp-dob').value              = e.date_of_birth       || '';
   document.getElementById('emp-gender').value           = e.gender               || '';
@@ -179,7 +177,6 @@ async function saveEmployee() {
     tfn:                  document.getElementById('emp-tfn').value.trim(),
     super_fund:           document.getElementById('emp-super-fund').value.trim(),
     super_fund_usi:       document.getElementById('emp-super-usi').value.trim(),
-    super_fund_abn:       document.getElementById('emp-super-fund-abn').value.trim(),
     super_member_number:  document.getElementById('emp-super-number').value.trim(),
     bank_bsb:             document.getElementById('emp-bank-bsb').value.trim(),
     bank_account:         document.getElementById('emp-bank-account').value.trim(),
@@ -188,7 +185,6 @@ async function saveEmployee() {
     active:               document.getElementById('emp-active').value === 'true',
     tax_free_threshold:   document.getElementById('emp-tax-free').value === 'true',
     residency_status:     document.getElementById('emp-residency').value,
-    hecs_help:            document.getElementById('emp-hecs-help').value === 'true',
     // STP2 fields
     date_of_birth:        document.getElementById('emp-dob').value || null,
     gender:               document.getElementById('emp-gender').value || null,
@@ -202,6 +198,9 @@ async function saveEmployee() {
   closeModal('emp-modal');
   renderEmployees();
   toast(`${editId ? 'Updated' : 'Added'} ${firstName} ${lastName} ✓`);
+
+  // Check if adding this employee crossed a billing tier threshold
+  if (!editId) await checkEmployeeTierChange();
 }
 
 async function deleteEmployeeConfirm(id) {
@@ -319,5 +318,65 @@ async function sendTaylaInvite() {
     statusEl.innerHTML = `<div style="padding:10px 14px;background:#fde2e2;border-radius:8px;font-size:12px;color:var(--danger);">⚠ ${err.message}</div>`;
     btn.textContent = '📲 Send Invite';
     btn.disabled    = false;
+  }
+}
+
+// ── Check if adding an employee crossed a billing tier
+// Called after every new employee save
+async function checkEmployeeTierChange() {
+  if (!_businessId || !_ownerBusinessId) return;
+
+  // Get total active employees across all locations
+  const allBizIds = [_ownerBusinessId, ...(_franchises || []).map(f => f.id)].filter(Boolean);
+  let totalEmp = 0;
+  for (const bizId of allBizIds) {
+    const { count } = await _supabase
+      .from('employees')
+      .select('*', { count: 'exact', head: true })
+      .eq('business_id', bizId)
+      .eq('active', true);
+    totalEmp += count || 0;
+  }
+
+  // Determine old count (before this save) and check tier boundaries
+  const oldCount = totalEmp - 1;
+  const getTier  = (n) => n <= 15 ? { name: 'Starter', base: 29 } : n <= 50 ? { name: 'Growth', base: 59 } : { name: 'Enterprise', base: 79 };
+  const oldTier  = getTier(oldCount);
+  const newTier  = getTier(totalEmp);
+
+  // No tier change — nothing to do
+  if (oldTier.name === newTier.name) return;
+
+  const notification = {
+    oldTier:  oldTier.name,
+    oldBase:  oldTier.base,
+    newTier:  newTier.name,
+    newBase:  newTier.base,
+    empCount: totalEmp,
+  };
+
+  if (_userRole === 'owner' && _businessId === _ownerBusinessId) {
+    // Owner is adding the employee directly — show modal immediately
+    document.getElementById('tier-change-content').innerHTML = `
+      <div style="padding:14px;background:var(--surface2);border-radius:10px;margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">
+          <span>Previous plan</span><span style="font-weight:600;">${oldTier.name} — $${oldTier.base}/month</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:700;color:var(--accent);">
+          <span>New plan</span><span>${newTier.name} — $${newTier.base}/month</span>
+        </div>
+      </div>
+      <div style="color:var(--text2);">
+        Your team has grown to <strong>${totalEmp} employees</strong> across all locations,
+        moving you to the <strong>${newTier.name}</strong> plan.<br><br>
+        Your next invoice will reflect the updated pricing.
+      </div>
+    `;
+    document.getElementById('tier-change-modal').classList.add('show');
+  } else {
+    // Franchise manager added the employee — flag for owner to see on next login
+    await _supabase.from('businesses')
+      .update({ pending_tier_notification: notification })
+      .eq('id', _ownerBusinessId);
   }
 }
