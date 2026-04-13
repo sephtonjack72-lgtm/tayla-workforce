@@ -835,6 +835,10 @@ async function switchFranchise(businessId) {
   _businessProfile = profile;
   _businessId      = businessId;
 
+  // Update billing tab visibility — only show for owner at head office
+  const billingTab = document.getElementById('acct-tab-billing');
+  if (billingTab) billingTab.style.display = (_userRole === 'owner' && _businessId === _ownerBusinessId) ? '' : 'none';
+
   // Clear all cached data so nothing from the old franchise bleeds through
   if (typeof shifts !== 'undefined')     { shifts.length = 0; }
   if (typeof employees !== 'undefined')  { employees.length = 0; }
@@ -988,10 +992,20 @@ async function loadTeamList() {
   if (!el) return;
   el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0;">Loading…</div>';
 
+  // Owners at head office see all team members across all franchises
+  const isHeadOffice = _userRole === 'owner' && _businessId === _ownerBusinessId;
+  const allBizIds = isHeadOffice
+    ? [_ownerBusinessId, ..._franchises.map(f => f.id)].filter(Boolean)
+    : [_businessId];
+
+  const bizNames = isHeadOffice
+    ? { [_ownerBusinessId]: 'Head Office', ..._franchises.reduce((m, f) => ({ ...m, [f.id]: f.biz_name }), {}) }
+    : {};
+
   const { data, error } = await _supabase
     .from('business_users')
     .select('*')
-    .eq('business_id', _businessId)
+    .in('business_id', allBizIds)
     .order('created_at');
 
   if (error || !data?.length) {
@@ -1009,6 +1023,7 @@ async function loadTeamList() {
         <div style="font-size:11px;color:var(--text3);">
           <span class="role-badge role-${u.role}">${roleName(u.role)}</span>
           <span style="margin-left:6px;">${u.status === 'pending' ? '· Invite pending' : u.status === 'active' ? '· Active' : '· Revoked'}</span>
+          ${isHeadOffice && bizNames[u.business_id] ? `<span style="margin-left:6px;color:var(--text3);">· ${bizNames[u.business_id]}</span>` : ''}
         </div>
       </div>
       ${u.role !== 'owner' && canAccess('team') ? `
