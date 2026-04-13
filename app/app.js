@@ -160,6 +160,121 @@ async function signOut() {
 }
 
 // ══════════════════════════════════════════════════════
+//  AUTO-MIGRATION — Single store → HQ + Franchise structure
+//  Runs once for existing accounts with no franchises
+// ══════════════════════════════════════════════════════
+
+async function migrateToHQStructure(existingBiz) {
+  // Create new Head Office business
+  const { data: hq, error: hqErr } = await _supabase.from('businesses').insert({
+    user_id:            _currentUser.id,
+    biz_name:           `${existingBiz.biz_name} HQ`,
+    abn:                existingBiz.abn || null,
+    award_type:         existingBiz.award_type || 'ma000003',
+    phone:              existingBiz.phone || null,
+    address_street:     existingBiz.address_street || null,
+    address_suburb:     existingBiz.address_suburb || null,
+    address_state:      existingBiz.address_state || null,
+    address_postcode:   existingBiz.address_postcode || null,
+    stripe_customer_id: existingBiz.stripe_customer_id || null,
+    trial_ends_at:      existingBiz.trial_ends_at || null,
+    created_at:         new Date().toISOString(),
+  }).select().single();
+
+  if (hqErr) {
+    console.error('Migration failed — HQ creation:', hqErr);
+    // Fall back to normal load without migration
+    await applyProfile(existingBiz);
+    hideAuth();
+    return;
+  }
+
+  // Add owner to Head Office business_users
+  await _supabase.from('business_users').insert({
+    business_id: hq.id,
+    user_id:     _currentUser.id,
+    email:       _currentUser.email,
+    role:        'owner',
+    status:      'active',
+    accepted_at: new Date().toISOString(),
+  });
+
+  // Generate connector code for existing store
+  const connectorCode = 'TF-' + Math.random().toString(36).toUpperCase().slice(2, 8);
+
+  // Update existing business to be a franchise under new HQ
+  await _supabase.from('businesses').update({
+    parent_business_id:      hq.id,
+    business_connector_code: connectorCode,
+    stripe_customer_id:      null, // Move billing to HQ
+  }).eq('id', existingBiz.id);
+
+  // Move Stripe customer to HQ if it existed
+  if (existingBiz.stripe_customer_id) {
+    await _supabase.from('businesses').update({
+      stripe_customer_id: existingBiz.stripe_customer_id,
+    }).eq('id', hq.id);
+  }
+
+  // Update globals
+  _businessProfile = hq;
+  _businessId      = hq.id;
+  _ownerBusinessId = hq.id;
+  _franchises      = [{ ...existingBiz, parent_business_id: hq.id, business_connector_code: connectorCode }];
+
+  await applyProfile(hq);
+  hideAuth();
+
+  // Show explainer modal
+  showMigrationExplainer(existingBiz.biz_name);
+}
+
+function showMigrationExplainer(storeName) {
+  // Create explainer modal dynamically
+  const existing = document.getElementById('migration-explainer-modal');
+  if (existing) existing.remove();
+
+  const empCount   = (typeof employees !== 'undefined') ? employees.filter(e => e.active !== false).length : 0;
+  const baseFee    = empCount <= 15 ? 29 : empCount <= 50 ? 59 : 79;
+  const tierName   = empCount <= 15 ? 'Starter' : empCount <= 50 ? 'Growth' : 'Enterprise';
+  const totalEst   = baseFee + (empCount * 6) + 0; // first franchise included in base
+
+  const modal = document.createElement('div');
+  modal.id = 'migration-explainer-modal';
+  modal.className = 'modal-overlay show';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:480px;">
+      <div style="text-align:center;margin-bottom:20px;">
+        <div style="font-size:40px;margin-bottom:12px;">🏢</div>
+        <h3 style="margin:0 0 8px;">Your account has been upgraded</h3>
+        <div style="font-size:13px;color:var(--text2);line-height:1.6;">
+          Tayla Workforce now supports multiple locations.<br>Here's what changed:
+        </div>
+      </div>
+      <div style="background:var(--surface2);border-radius:10px;padding:16px;margin-bottom:16px;font-size:13px;line-height:1.8;">
+        <div>🏢 <strong>${storeName} HQ</strong> — new Head Office (analytics &amp; billing)</div>
+        <div>📍 <strong>${storeName}</strong> — your existing store (all data untouched)</div>
+      </div>
+      <div style="background:rgba(56,161,105,.08);border-radius:10px;padding:14px;margin-bottom:16px;font-size:13px;border:1px solid rgba(56,161,105,.2);">
+        <div style="font-weight:700;color:var(--success);margin-bottom:8px;">✓ Nothing was lost</div>
+        <div style="color:var(--text2);line-height:1.7;">
+          All your employees, shifts, timesheets and payroll data are exactly as you left them.<br><br>
+          <strong>Your first location is included</strong> in your ${tierName} plan ($${baseFee}/month).<br>
+          Additional locations cost $10/month each.
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:20px;text-align:center;">
+        Ready to add a second location? Go to Account Settings → Team → Franchises.
+      </div>
+      <button class="btn btn-primary" style="width:100%;" onclick="document.getElementById('migration-explainer-modal').remove()">
+        Got it — let's go!
+      </button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+// ══════════════════════════════════════════════════════
 //  AFTER LOGIN — one fetch, then render everything
 // ══════════════════════════════════════════════════════
 
@@ -189,6 +304,12 @@ async function afterLogin() {
       .eq('parent_business_id', ownedBiz.id)
       .order('biz_name');
     _franchises = franchiseData || [];
+
+    // Auto-migrate single-store accounts to HQ + Franchise structure
+    if (_franchises.length === 0) {
+      await migrateToHQStructure(ownedBiz);
+      return; // migrateToHQStructure calls applyProfile and hideAuth
+    }
 
     await applyProfile(ownedBiz);
     hideAuth();
@@ -359,16 +480,58 @@ async function saveBusinessSetup() {
   const abn       = document.getElementById('setup-abn').value.trim();
   const awardType = document.getElementById('setup-award').value;
   if (!name) { toast('Business name is required'); return; }
-  const { data, error } = await _supabase.from('businesses').insert({
-    user_id: _currentUser.id, biz_name: name, abn, award_type: awardType,
+
+  // Create Head Office (blank — analytics only)
+  const { data: hq, error: hqErr } = await _supabase.from('businesses').insert({
+    user_id:    _currentUser.id,
+    biz_name:   `${name} HQ`,
+    abn,
+    award_type: awardType,
     created_at: new Date().toISOString(),
   }).select().single();
-  if (error) { toast('Error: ' + error.message); return; }
-  _businessProfile = data;
-  _businessId      = data.id;
+  if (hqErr) { toast('Error: ' + hqErr.message); return; }
+
+  // Add owner to Head Office business_users
+  await _supabase.from('business_users').insert({
+    business_id: hq.id,
+    user_id:     _currentUser.id,
+    email:       _currentUser.email,
+    role:        'owner',
+    status:      'active',
+    accepted_at: new Date().toISOString(),
+  });
+
+  // Create Franchise 1 (the actual store) under Head Office
+  const connectorCode = 'TF-' + Math.random().toString(36).toUpperCase().slice(2, 8);
+  const { data: franchise, error: fErr } = await _supabase.from('businesses').insert({
+    user_id:                 _currentUser.id,
+    biz_name:                name,
+    abn,
+    award_type:              awardType,
+    parent_business_id:      hq.id,
+    business_connector_code: connectorCode,
+    created_at:              new Date().toISOString(),
+  }).select().single();
+  if (fErr) { toast('Error: ' + fErr.message); return; }
+
+  // Add owner to Franchise 1 business_users
+  await _supabase.from('business_users').insert({
+    business_id: franchise.id,
+    user_id:     _currentUser.id,
+    email:       _currentUser.email,
+    role:        'owner',
+    status:      'active',
+    accepted_at: new Date().toISOString(),
+  });
+
+  _businessProfile = hq;
+  _businessId      = hq.id;
+  _ownerBusinessId = hq.id;
+  _franchises      = [franchise];
+
   document.getElementById('setup-overlay').style.display = 'none';
   hideAuth();
-  await applyProfile(data);
+  await applyProfile(hq);
   toast('Welcome to Tayla Workforce! 🎉');
 }
 
@@ -1301,12 +1464,13 @@ async function loadBillingPanel() {
   // Count employees and franchises for cost breakdown
   const empCount       = (typeof employees !== 'undefined') ? employees.filter(e => e.active !== false).length : 0;
   const franchiseCount = _franchises?.length || 0;
+  const extraFranchises = Math.max(0, franchiseCount - 1); // first franchise included in base
 
   // Tiered base fee
   const baseFee  = empCount <= 15 ? 29 : empCount <= 50 ? 59 : 79;
   const tierName = empCount <= 15 ? 'Starter' : empCount <= 50 ? 'Growth' : 'Enterprise';
-  const tierDesc = empCount <= 15 ? 'up to 15 employees' : empCount <= 50 ? '16–50 employees' : '50+ employees';
-  const monthlyCost = baseFee + (empCount * 6) + (franchiseCount * 10);
+  const tierDesc = empCount <= 15 ? 'up to 15 employees · 1 location included' : empCount <= 50 ? '16–50 employees · 1 location included' : '50+ employees · 1 location included';
+  const monthlyCost = baseFee + (empCount * 6) + (extraFranchises * 10);
 
   // Breakdown
   if (breakdownEl) {
@@ -1321,10 +1485,10 @@ async function loadBillingPanel() {
           <span>${empCount} employee${empCount !== 1 ? 's' : ''} × $6.00</span>
           <span style="font-weight:600;">$${(empCount * 6).toFixed(2)}</span>
         </div>
-        ${franchiseCount > 0 ? `
+        ${extraFranchises > 0 ? `
         <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border);">
-          <span>${franchiseCount} franchise${franchiseCount > 1 ? 's' : ''} × $10.00</span>
-          <span style="font-weight:600;">$${(franchiseCount * 10).toFixed(2)}</span>
+          <span>${extraFranchises} additional location${extraFranchises > 1 ? 's' : ''} × $10.00</span>
+          <span style="font-weight:600;">$${(extraFranchises * 10).toFixed(2)}</span>
         </div>` : ''}
         <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;padding:8px 0;color:var(--accent);">
           <span>Total per month</span>
