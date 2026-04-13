@@ -1585,3 +1585,123 @@ tr:hover td { background: var(--surface2); }
   gap: 12px;
   margin-bottom: 16px;
 }
+
+/* ══════════════════════════════════════════════════════
+   SVG Icon System
+   Inline SVG icons replacing emojis throughout the app
+══════════════════════════════════════════════════════ */
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+.icon svg {
+  display: block;
+}
+
+/* ── Icon sizes ── */
+.icon-sm  svg { width: 14px; height: 14px; }
+.icon-md  svg { width: 16px; height: 16px; }
+.icon-lg  svg { width: 20px; height: 20px; }
+.icon-xl  svg { width: 32px; height: 32px; }
+.icon-2xl svg { width: 48px; height: 48px; }
+
+/* ── Tab icons — nav ── */
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tab svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: opacity .15s;
+}
+.tab.active svg,
+.tab:hover svg {
+  opacity: 1;
+}
+
+/* ── Account modal tab icons ── */
+.acct-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.acct-tab svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* ── Button icons ── */
+.btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── Icon-only close button ── */
+.btn-icon {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--text3);
+  display: inline-flex;
+  align-items: center;
+  border-radius: 4px;
+  transition: color .15s, background .15s;
+}
+.btn-icon:hover {
+  color: var(--text);
+  background: var(--surface2);
+}
+.btn-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ── Decorative modal icons ── */
+.modal-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  margin: 0 auto 16px;
+}
+.modal-icon svg {
+  width: 28px;
+  height: 28px;
+}
+.modal-icon-blue    { background: rgba(79,142,247,.12); color: var(--accent3); }
+.modal-icon-green   { background: rgba(56,161,105,.12); color: var(--success); }
+.modal-icon-yellow  { background: rgba(232,197,71,.15); color: #b7960a; }
+.modal-icon-red     { background: rgba(229,62,62,.10);  color: var(--danger); }
+.modal-icon-neutral { background: var(--surface2);      color: var(--text2); }
+
+/* ── Dropdown item icons ── */
+.dd-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dd-item svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: var(--text3);
+}
