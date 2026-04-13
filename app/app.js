@@ -628,6 +628,9 @@ function openAccountSettings(tab = 'profile') {
   document.getElementById('biz-name-input').value         = _businessProfile?.biz_name      || '';
   document.getElementById('biz-abn-input').value          = _businessProfile?.abn            || '';
   document.getElementById('biz-pay-frequency-input').value = _businessProfile?.pay_frequency || 'weekly';
+  // Populate read-only Workforce Business ID for copying into Tayla Business
+  const wfIdEl = document.getElementById('biz-workforce-id-display');
+  if (wfIdEl) wfIdEl.value = _businessId || '';
   document.getElementById('biz-address-street-input').value  = _businessProfile?.address_street  || '';
   document.getElementById('biz-address-suburb-input').value  = _businessProfile?.address_suburb  || '';
   document.getElementById('biz-address-state-input').value   = _businessProfile?.address_state   || '';
@@ -732,6 +735,18 @@ async function saveBusinessSettings() {
   msgEl.style.color = 'var(--success)';
   msgEl.textContent = '✓ Business settings saved';
   setTimeout(() => { msgEl.textContent = ''; }, 3000);
+}
+
+function copyWorkforceBusinessId() {
+  const id = _businessId;
+  if (!id) { toast('Business ID not available'); return; }
+  navigator.clipboard.writeText(id).then(() => {
+    toast('Workforce Business ID copied — paste it into Tayla Business → Settings → Workforce Link ✓');
+  }).catch(() => {
+    const el = document.getElementById('biz-workforce-id-display');
+    if (el) { el.select(); document.execCommand('copy'); }
+    toast('Workforce Business ID copied ✓');
+  });
 }
 
 async function testBusinessLink() {
