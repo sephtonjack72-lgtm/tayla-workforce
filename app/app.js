@@ -613,6 +613,7 @@ function showPage(id) {
   if (id === 'timesheets' && typeof renderTimesheetsFromMemory === 'function') renderTimesheetsFromMemory();
   if (id === 'awards'     && typeof initAwardPage              === 'function') initAwardPage();
   if (id === 'leave'      && typeof initLeavePage              === 'function') initLeavePage();
+  if (id === 'clockin'    && typeof renderClockInPage          === 'function') renderClockInPage();
 }
 
 // ══════════════════════════════════════════════════════
