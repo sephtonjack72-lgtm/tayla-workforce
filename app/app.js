@@ -1483,10 +1483,11 @@ async function loadBillingPanel() {
           <span>${tierName} plan <span style="color:var(--text3);font-size:11px;">(${tierDesc})</span></span>
           <span style="font-weight:600;">$${baseFee.toFixed(2)}</span>
         </div>
+        ${empCount > 0 ? `
         <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border);">
           <span>${empCount} employee${empCount !== 1 ? 's' : ''} × $6.00</span>
           <span style="font-weight:600;">$${(empCount * 6).toFixed(2)}</span>
-        </div>
+        </div>` : ''}
         ${extraFranchises > 0 ? `
         <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border);">
           <span>${extraFranchises} additional location${extraFranchises > 1 ? 's' : ''} × $10.00</span>
