@@ -45,9 +45,11 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
 header {
   background: var(--accent);
   padding: 0 28px;
-  height: 56px;
+  padding-top: env(safe-area-inset-top);
+  height: calc(56px + env(safe-area-inset-top));
   display: flex;
-  align-items: center;
+  align-items: flex-end;
+  padding-bottom: 0;
   justify-content: space-between;
   position: sticky;
   top: 0;
@@ -121,11 +123,17 @@ nav {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   padding: 0 28px;
+  padding-left: max(28px, env(safe-area-inset-left));
+  padding-right: max(28px, env(safe-area-inset-right));
   display: flex;
   align-items: center;
   gap: 0;
   overflow-x: auto;
+  /* Hide scrollbar on mobile */
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
+nav::-webkit-scrollbar { display: none; }
 .tab {
   padding: 14px 18px;
   font-size: 13px;
@@ -1704,4 +1712,43 @@ tr:hover td { background: var(--surface2); }
   height: 15px;
   flex-shrink: 0;
   color: var(--text3);
+}
+
+/* ══════════════════════════════════════════════════════
+   PWA / Mobile Safe Area & Input Fixes
+══════════════════════════════════════════════════════ */
+
+/* Safe area bottom — main content above home indicator */
+main {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Prevent iOS input zoom — all inputs must be >= 16px font size on mobile */
+@media (max-width: 768px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+  /* Slightly tighter padding on mobile */
+  header {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+  main {
+    padding: 16px max(16px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  /* Tab bar smaller on mobile */
+  .tab {
+    padding: 12px 12px;
+    font-size: 12px;
+  }
+  .tab svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+/* Clock In page — optimised for shared tablet use */
+#clockin-content {
+  max-width: 600px;
+  margin: 0 auto;
 }
