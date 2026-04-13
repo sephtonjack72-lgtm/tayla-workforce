@@ -533,6 +533,8 @@ async function saveBusinessSetup() {
   hideAuth();
   await applyProfile(hq);
   toast('Welcome to Tayla Workforce! 🎉');
+  // Reload to fully initialise all tabs and data for the new account
+  setTimeout(() => window.location.reload(), 1500);
 }
 
 // ══════════════════════════════════════════════════════
