@@ -245,15 +245,15 @@ function showMigrationExplainer(storeName) {
   modal.innerHTML = `
     <div class="modal" style="max-width:480px;">
       <div style="text-align:center;margin-bottom:20px;">
-        <div style="font-size:40px;margin-bottom:12px;">🏢</div>
+        <div class="modal-icon modal-icon-blue" style="margin-bottom:16px;">${ICONS.building}</div>
         <h3 style="margin:0 0 8px;">Your account has been upgraded</h3>
         <div style="font-size:13px;color:var(--text2);line-height:1.6;">
           Tayla Workforce now supports multiple locations.<br>Here's what changed:
         </div>
       </div>
       <div style="background:var(--surface2);border-radius:10px;padding:16px;margin-bottom:16px;font-size:13px;line-height:1.8;">
-        <div>🏢 <strong>${storeName} HQ</strong> — new Head Office (analytics &amp; billing)</div>
-        <div>📍 <strong>${storeName}</strong> — your existing store (all data untouched)</div>
+        <div>${ICONS.location} <strong>${storeName} HQ</strong> — new Head Office (analytics &amp; billing)</div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> <strong>${storeName}</strong> — your existing store (all data untouched)</div>
       </div>
       <div style="background:rgba(56,161,105,.08);border-radius:10px;padding:14px;margin-bottom:16px;font-size:13px;border:1px solid rgba(56,161,105,.2);">
         <div style="font-weight:700;color:var(--success);margin-bottom:8px;">✓ Nothing was lost</div>
@@ -367,7 +367,7 @@ function showInviteErrorScreen() {
     el.style.cssText = 'position:fixed;inset:0;background:#0f1623;display:flex;align-items:center;justify-content:center;';
     el.innerHTML = `
       <div style="background:#1e2235;border-radius:16px;padding:40px 36px;max-width:420px;text-align:center;color:#fff;">
-        <div style="font-size:48px;margin-bottom:16px;">⚠️</div>
+        <div class="modal-icon modal-icon-yellow" style="margin-bottom:16px;">${ICONS.warning}</div>
         <div style="font-size:20px;font-weight:700;margin-bottom:8px;">Invite Link Issue</div>
         <div style="font-size:14px;color:rgba(255,255,255,.6);line-height:1.6;margin-bottom:24px;">
           This invite link has expired or already been used. Ask your employer to send a new invite link.
@@ -959,14 +959,14 @@ async function testBusinessLink() {
 
     if (error || !data) {
       statusEl.style.color = 'var(--danger)';
-      statusEl.textContent = '✕ Business ID not found — check you copied it correctly';
+      statusEl.textContent = '✗ Business ID not found — check you copied it correctly';
     } else {
       statusEl.style.color = 'var(--success)';
       statusEl.textContent = `✓ Connected to "${data.biz_name}" — save to activate`;
     }
   } catch (e) {
     statusEl.style.color = 'var(--danger)';
-    statusEl.textContent = '✕ Connection failed — check your internet and try again';
+    statusEl.textContent = '✗ Connection failed — check your internet and try again';
   }
 }
 
@@ -988,11 +988,11 @@ function renderFranchiseSwitcher() {
     <select id="franchise-select" onchange="switchFranchise(this.value)"
       style="font-size:12px;padding:5px 10px;border-radius:7px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#fff;cursor:pointer;max-width:180px;">
       <option value="${_ownerBusinessId}" ${_businessId === _ownerBusinessId ? 'selected' : ''}>
-        🏢 Head Office
+        ${ICONS.building} Head Office
       </option>
       ${_franchises.map(f => `
         <option value="${f.id}" ${_businessId === f.id ? 'selected' : ''}>
-          📍 ${f.biz_name}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> ${f.biz_name}
         </option>
       `).join('')}
     </select>
@@ -1090,7 +1090,7 @@ async function loadFranchiseList() {
   el.innerHTML = _franchises.map(f => `
     <div style="padding:14px 0;border-bottom:1px solid var(--border);">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
-        <div class="avatar" style="width:32px;height:32px;font-size:12px;flex-shrink:0;">📍</div>
+        <div class="avatar" style="width:32px;height:32px;font-size:12px;flex-shrink:0;">${ICONS.location}</div>
         <div style="flex:1;min-width:0;">
           <div style="font-weight:600;font-size:13px;">${f.biz_name}</div>
           <div style="font-size:11px;color:var(--text3);">${f.abn ? 'ABN: ' + f.abn + ' · ' : ''}${f.address || ''}</div>
@@ -1732,43 +1732,43 @@ async function loadBillingPanel() {
 
   const statusMap = {
     trial: {
-      badge: '🎉 Free Trial',
+      badge: `${icon('gift','sm')} Free Trial`,
       color: 'var(--accent2)',
       detail: trialEnd ? `Your free trial ends on <strong>${fmt(trialEnd)}</strong>. Subscribe before then to keep access.` : 'You are on a free trial.',
       showSub: true, showPortal: false,
     },
     trial_expired: {
-      badge: '⚠️ Trial Expired',
+      badge: `${icon('warning','sm')} Trial Expired`,
       color: 'var(--danger)',
       detail: 'Your free trial has ended. Subscribe to restore access.',
       showSub: true, showPortal: false,
     },
     active: {
-      badge: '✓ Active',
+      badge: `${icon('check','sm')} Active`,
       color: 'var(--success)',
       detail: periodEnd ? `Your subscription renews on <strong>${fmt(periodEnd)}</strong>.` : 'Your subscription is active.',
       showSub: false, showPortal: true,
     },
     grace: {
-      badge: '⚠️ Payment Failed',
+      badge: `${icon('warning','sm')} Payment Failed`,
       color: 'var(--accent2)',
       detail: `Your last payment failed. Update your payment method within 10 days to avoid losing access.`,
       showSub: false, showPortal: true,
     },
     locked: {
-      badge: '🔒 Locked',
+      badge: `${icon('lock','sm')} Locked`,
       color: 'var(--danger)',
       detail: 'Access suspended due to non-payment. Subscribe to restore access.',
       showSub: true, showPortal: false,
     },
     cancelled: {
-      badge: '✕ Cancelled',
+      badge: `${icon('close','sm')} Cancelled`,
       color: 'var(--text3)',
       detail: periodEnd ? `Your subscription has ended. Data retained for compliance. Reactivate to restore access.` : 'Your subscription has been cancelled.',
       showSub: true, showPortal: false,
     },
     cancellation_pending: {
-      badge: '⚠ Cancelling',
+      badge: `${icon('warning','sm')} Cancelling`,
       color: '#d97706',
       detail: periodEnd ? `Your subscription is cancelled but you retain full access until <strong>${fmt(periodEnd)}</strong>. Reactivate anytime.` : 'Your subscription will cancel at the end of your billing period.',
       showSub: true, showPortal: true,
@@ -1851,21 +1851,21 @@ function showBillingBanner() {
       const daysLeft = Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
       if (daysLeft <= 7) {
         show = true;
-        msg = `⏳ Your free trial ends in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}. Subscribe to keep access.`;
+        msg = `Your free trial ends in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}. Subscribe to keep access.`;
         bgColor = '#7c3aed';
       }
     } else if (status === 'trial_expired') {
       show = true;
-      msg = '⚠️ Your free trial has expired. Subscribe to restore full access.';
+      msg = 'Your free trial has expired. Subscribe to restore full access.';
       bgColor = 'var(--danger)';
     } else if (status === 'grace') {
       const daysLeft = graceEnd ? Math.ceil((graceEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : 10;
       show = true;
-      msg = `⚠️ Payment failed. Update your payment method within ${daysLeft} day${daysLeft !== 1 ? 's' : ''} to avoid lockout.`;
+      msg = `Payment failed. Update your payment method within ${daysLeft} day${daysLeft !== 1 ? 's' : ''} to avoid lockout.`;
       bgColor = '#d97706';
     } else if (status === 'locked') {
       show = true;
-      msg = '🔒 Your account is locked due to non-payment. Subscribe to restore access.';
+      msg = 'Your account is locked due to non-payment. Subscribe to restore access.';
       bgColor = 'var(--danger)';
       if (btn) btn.textContent = 'Subscribe Now';
     } else if (status === 'cancellation_pending') {
@@ -1877,7 +1877,7 @@ function showBillingBanner() {
       if (btn) btn.textContent = 'Reactivate';
     } else if (status === 'cancelled') {
       show    = true;
-      msg     = '📋 Your subscription has ended. Your data is retained for compliance. Reactivate to restore full access.';
+      msg     = 'Your subscription has ended. Your data is retained for compliance. Reactivate to restore full access.';
       bgColor = 'var(--danger)';
       if (btn) btn.textContent = 'Reactivate';
     }
@@ -2119,7 +2119,7 @@ function openSTP2Modal() {
     </div>
     ${issues.length > 0 ? `
     <div style="padding:12px 14px;background:rgba(229,62,62,.08);border-radius:8px;border:1px solid rgba(229,62,62,.2);font-size:12px;color:var(--danger);margin-bottom:12px;">
-      ⚠ ${issues.length} employee${issues.length !== 1 ? 's' : ''} missing STP2 data — click "Check Employee Readiness" for details
+      ${issues.length} employee${issues.length !== 1 ? 's' : ''} missing STP2 data — click "Check Employee Readiness" for details
     </div>` : `
     <div style="padding:12px 14px;background:rgba(56,161,105,.08);border-radius:8px;border:1px solid rgba(56,161,105,.2);font-size:12px;color:var(--success);margin-bottom:12px;">
       ✓ All employees have required STP2 data
