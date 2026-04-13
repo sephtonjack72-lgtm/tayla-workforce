@@ -808,7 +808,10 @@ function openAccountSettings(tab = 'profile') {
 
   // Show cancel subscription section for owners at head office only
   const cancelSection = document.getElementById('cancel-subscription-section');
-  if (cancelSection) cancelSection.style.display = (_userRole === 'owner' && _businessId === _ownerBusinessId) ? 'block' : 'none';
+  if (cancelSection) {
+    const isCancelable = (_userRole === 'owner' && _businessId === _ownerBusinessId);
+    cancelSection.style.display = isCancelable ? 'block' : 'none';
+  }
 
   switchAcctTab(tab);
   document.getElementById('account-modal')?.classList.add('show');
@@ -1616,6 +1619,13 @@ async function loadBillingPanel() {
   detailEl.innerHTML = s.detail;
   if (subBtn)    subBtn.style.display    = s.showSub ? '' : 'none';
   if (portalBtn) portalBtn.style.display = s.showPortal ? '' : 'none';
+
+  // Hide cancel subscription section if already cancelled or pending
+  const cancelSection = document.getElementById('cancel-subscription-section');
+  if (cancelSection) {
+    const hideCancelBtn = ['cancelled', 'cancellation_pending', 'trial_expired', 'locked'].includes(status);
+    cancelSection.style.display = hideCancelBtn ? 'none' : 'block';
+  }
 }
 
 async function startCheckout() {
