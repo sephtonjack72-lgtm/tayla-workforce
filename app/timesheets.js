@@ -123,7 +123,12 @@ function renderTimesheetTable(weekDates) {
     rostered: '<span class="badge badge-grey">Rostered</span>',
   })[status] || '';
 
-  tbody.innerHTML = rows.map(({ emp, date, ts, shift }) => {
+    const fmtTs = (isoStr) => {
+      if (!isoStr) return '—';
+      return new Date(isoStr).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true });
+    };
+
+    tbody.innerHTML = rows.map(({ emp, date, ts, shift }) => {
     const entry = ts || {
       start_time: shift?.start_time,
       end_time:   shift?.end_time,
@@ -136,6 +141,21 @@ function renderTimesheetTable(weekDates) {
 
     const initials = ((emp.first_name?.[0] || '') + (emp.last_name?.[0] || '')).toUpperCase();
 
+    const entryMethodBadge = ts?.entry_method === 'clock'
+      ? '<span style="font-size:10px;background:rgba(56,161,105,.12);color:var(--success);padding:2px 6px;border-radius:4px;font-weight:600;">CLOCKED</span>'
+      : ts?.entry_method === 'manual'
+      ? '<span style="font-size:10px;background:rgba(237,137,54,.12);color:#c05621;padding:2px 6px;border-radius:4px;font-weight:600;">MANUAL</span>'
+      : '';
+
+    const clockInfo = ts?.clock_in
+      ? `<div style="font-size:11px;color:var(--text3);white-space:nowrap;">
+           In: ${fmtTs(ts.clock_in)}<br>
+           ${ts.clock_out ? 'Out: ' + fmtTs(ts.clock_out) : '<span style="color:var(--accent);">Active</span>'}
+           ${ts.break_mins ? '<br>Break: ' + ts.break_mins + 'min' : ''}
+           ${ts.clock_in_note ? '<br><span style="color:var(--accent2);font-style:italic;">' + ts.clock_in_note + '</span>' : ''}
+         </div>`
+      : '<span style="color:var(--text3);font-size:11px;">—</span>';
+
     return `
       <tr>
         <td>
@@ -143,7 +163,7 @@ function renderTimesheetTable(weekDates) {
             <div class="avatar" style="width:28px;height:28px;font-size:10px;">${initials}</div>
             <div>
               <div style="font-weight:500;">${emp.first_name} ${emp.last_name}</div>
-              <div style="font-size:11px;color:var(--text3);">${emp.employment_type || 'casual'}</div>
+              <div style="font-size:11px;color:var(--text3);">${emp.employment_type || 'casual'} ${entryMethodBadge}</div>
             </div>
           </div>
         </td>
@@ -165,6 +185,7 @@ function renderTimesheetTable(weekDates) {
               onchange="updateTsEntry('${emp.id}','${date}','end_time',this.value)">
           </div>
         </td>
+        <td>${clockInfo}</td>
         <td class="mono" style="font-size:12px;">${pay ? pay.workedHours + 'h' : '—'}</td>
         <td class="mono" style="font-size:12px;font-weight:600;">${pay ? fmt(pay.totalPay) : '—'}</td>
         <td>${statusBadge(ts?.status || 'rostered')}</td>
@@ -574,4 +595,382 @@ async function pushPayrollToBusiness(periodStart, periodEnd, activeEmps) {
     console.error('Business payroll push failed:', err);
     // Non-fatal — don't block payslip push result
   }
+}
+
+// ══════════════════════════════════════════════════════
+//  CLOCK IN / CLOCK OUT
+//  Shared tablet mode — runs under manager's session
+//  Employees search their name, clock in/out/break
+// ══════════════════════════════════════════════════════
+
+let _clockinPendingEmployee = null; // holds employee while unrostered modal is open
+let _clockinSearch = '';
+
+// ── Called when Clock In tab is shown
+function renderClockInPage() {
+  const container = document.getElementById('clockin-content');
+  if (!container) return;
+
+  const today     = localDateStr(new Date());
+  const now       = new Date();
+  const timeStr   = now.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const dateLabel = now.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+  // Get today's active clock-in records from timesheets
+  const todayTs = timesheets.filter(t => t.date === today);
+
+  const activeEmps = employees.filter(e => e.active !== false);
+  const searchLower = _clockinSearch.toLowerCase();
+  const filtered = _clockinSearch.length >= 1
+    ? activeEmps.filter(e =>
+        `${e.first_name} ${e.last_name}`.toLowerCase().includes(searchLower))
+    : [];
+
+  container.innerHTML = `
+    <!-- Header -->
+    <div style="text-align:center;padding:24px 0 16px;">
+      <div style="font-size:13px;color:var(--text3);margin-bottom:4px;">${dateLabel}</div>
+      <div style="font-size:36px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;" id="clockin-live-time">${timeStr}</div>
+      <div style="font-size:13px;color:var(--text3);margin-top:4px;">${_businessProfile?.biz_name || 'Tayla Workforce'}</div>
+    </div>
+
+    <!-- Search -->
+    <div style="max-width:480px;margin:0 auto 24px;">
+      <div style="position:relative;">
+        <input type="text"
+          id="clockin-search"
+          class="form-input"
+          placeholder="Search your name to clock in or out…"
+          value="${_clockinSearch}"
+          style="font-size:16px;padding:14px 16px;border-radius:12px;"
+          oninput="_clockinSearch=this.value;renderClockInPage()"
+          autocomplete="off"
+          autocorrect="off"
+          spellcheck="false">
+        ${_clockinSearch ? `<button onclick="_clockinSearch='';renderClockInPage()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:18px;color:var(--text3);cursor:pointer;">✕</button>` : ''}
+      </div>
+
+      <!-- Search results -->
+      ${filtered.length > 0 ? `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-top:8px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08);">
+          ${filtered.slice(0,8).map(emp => {
+            const ts = todayTs.find(t => t.employee_id === emp.id);
+            const isClockedIn  = ts?.clock_in && !ts?.clock_out;
+            const isOnBreak    = isClockedIn && ts?.break_start && !ts?.break_end;
+            const isClockedOut = ts?.clock_out;
+
+            let statusBadge = '';
+            if (isClockedOut)  statusBadge = '<span style="font-size:11px;color:var(--success);font-weight:600;">✓ Clocked out</span>';
+            else if (isOnBreak) statusBadge = '<span style="font-size:11px;color:var(--accent2);font-weight:600;">☕ On break</span>';
+            else if (isClockedIn) statusBadge = '<span style="font-size:11px;color:var(--accent);font-weight:600;">● Clocked in</span>';
+
+            const todayShift = shifts.find(s => s.employee_id === emp.id && s.date === today);
+            const shiftLabel = todayShift ? `${fmtTime(todayShift.start_time)} – ${fmtTime(todayShift.end_time)}` : 'No rostered shift';
+            const initials   = ((emp.first_name?.[0]||'') + (emp.last_name?.[0]||'')).toUpperCase();
+
+            return `
+              <div onclick="selectClockInEmployee('${emp.id}')"
+                style="display:flex;align-items:center;gap:14px;padding:14px 16px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .15s;"
+                onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+                <div class="avatar" style="width:40px;height:40px;font-size:14px;flex-shrink:0;">${initials}</div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-weight:600;font-size:15px;">${emp.first_name} ${emp.last_name}</div>
+                  <div style="font-size:12px;color:var(--text3);">${shiftLabel}</div>
+                </div>
+                <div>${statusBadge}</div>
+              </div>`;
+          }).join('')}
+        </div>` : ''}
+
+      ${_clockinSearch.length >= 1 && filtered.length === 0 ? `
+        <div style="text-align:center;padding:20px;color:var(--text3);font-size:13px;">
+          No employees found matching "${_clockinSearch}"
+        </div>` : ''}
+    </div>
+
+    <!-- Active clocked-in employees -->
+    ${renderClockedInList(today, todayTs)}
+  `;
+
+  // Start live clock
+  startLiveClock();
+}
+
+function renderClockedInList(today, todayTs) {
+  const clockedIn = todayTs.filter(t => t.clock_in && !t.clock_out);
+  if (!clockedIn.length) return '';
+
+  return `
+    <div style="max-width:480px;margin:0 auto;">
+      <div style="font-weight:600;font-size:13px;color:var(--text2);margin-bottom:12px;">Currently on shift</div>
+      ${clockedIn.map(ts => {
+        const emp = employees.find(e => e.id === ts.employee_id);
+        if (!emp) return '';
+        const clockInTime = new Date(ts.clock_in);
+        const elapsed = Math.floor((Date.now() - clockInTime.getTime()) / 60000);
+        const hrs = Math.floor(elapsed / 60);
+        const mins = elapsed % 60;
+        const elapsedStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+        const isOnBreak = ts.break_start && !ts.break_end;
+        const initials = ((emp.first_name?.[0]||'') + (emp.last_name?.[0]||'')).toUpperCase();
+
+        return `
+          <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;">
+            <div class="avatar" style="width:36px;height:36px;font-size:13px;">${initials}</div>
+            <div style="flex:1;">
+              <div style="font-weight:600;font-size:14px;">${emp.first_name} ${emp.last_name}</div>
+              <div style="font-size:11px;color:var(--text3);">
+                Clocked in ${clockInTime.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',hour12:true})}
+                · ${isOnBreak ? '<span style="color:var(--accent2);">On break</span>' : elapsedStr + ' elapsed'}
+              </div>
+            </div>
+          </div>`;
+      }).join('')}
+    </div>`;
+}
+
+let _liveClockInterval = null;
+function startLiveClock() {
+  clearInterval(_liveClockInterval);
+  _liveClockInterval = setInterval(() => {
+    const el = document.getElementById('clockin-live-time');
+    if (!el) { clearInterval(_liveClockInterval); return; }
+    const now = new Date();
+    el.textContent = now.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true });
+  }, 10000);
+}
+
+// ── Employee selected from search results
+async function selectClockInEmployee(employeeId) {
+  const emp     = employees.find(e => e.id === employeeId);
+  if (!emp) return;
+
+  const today   = localDateStr(new Date());
+  const ts      = timesheets.find(t => t.employee_id === employeeId && t.date === today);
+  const shift   = shifts.find(s => s.employee_id === employeeId && s.date === today);
+
+  _clockinSearch = '';
+
+  // Determine action based on current state
+  if (!ts || !ts.clock_in) {
+    // Not clocked in yet
+    if (!shift) {
+      // No rostered shift — show reason modal
+      _clockinPendingEmployee = emp;
+      document.getElementById('unrostered-modal-name').textContent =
+        `${emp.first_name} ${emp.last_name}`;
+      document.getElementById('unrostered-modal').classList.add('show');
+    } else {
+      await executeClockin(emp, null);
+    }
+  } else if (ts.clock_in && !ts.clock_out) {
+    // Clocked in — show break/clock out options
+    showClockActionModal(emp, ts);
+  } else {
+    // Already clocked out
+    showAlreadyClockedOut(emp);
+  }
+}
+
+function showClockActionModal(emp, ts) {
+  const isOnBreak  = ts.break_start && !ts.break_end;
+  const modalEl    = document.getElementById('break-modal');
+  const nameEl     = document.getElementById('break-modal-name');
+  const msgEl      = document.getElementById('break-modal-msg');
+  const confirmBtn = document.getElementById('break-modal-confirm');
+
+  nameEl.textContent = `${emp.first_name} ${emp.last_name}`;
+
+  if (isOnBreak) {
+    const breakStart = new Date(ts.break_start);
+    const breakMins  = Math.floor((Date.now() - breakStart.getTime()) / 60000);
+    msgEl.textContent = `End break? You've been on break for ${breakMins} minute${breakMins !== 1 ? 's' : ''}.`;
+    confirmBtn.textContent = 'End Break';
+    confirmBtn.onclick = () => {
+      document.getElementById('break-modal').classList.remove('show');
+      executeBreakEnd(emp, ts);
+    };
+  } else {
+    const clockInTime = new Date(ts.clock_in);
+    const elapsed = Math.floor((Date.now() - clockInTime.getTime()) / 60000);
+    const hrs = Math.floor(elapsed / 60);
+    const mins = elapsed % 60;
+    const elapsedStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+
+    msgEl.innerHTML = `You've been clocked in for <strong>${elapsedStr}</strong>.<br>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="executeBreakStart(employees.find(e=>e.id==='${emp.id}'),timesheets.find(t=>t.employee_id==='${emp.id}'&&t.date==='${localDateStr(new Date())}'));document.getElementById('break-modal').classList.remove('show')">
+          ☕ Start Break
+        </button>
+      </div>`;
+    confirmBtn.textContent = 'Clock Out';
+    confirmBtn.onclick = () => {
+      document.getElementById('break-modal').classList.remove('show');
+      executeClockout(emp, ts);
+    };
+  }
+
+  modalEl.classList.add('show');
+}
+
+function showAlreadyClockedOut(emp) {
+  toast(`${emp.first_name} has already clocked out today`);
+  renderClockInPage();
+}
+
+// ── Unrostered reason confirmed
+async function confirmUnrosteredClockin(reason) {
+  document.getElementById('unrostered-modal').classList.remove('show');
+  const emp = _clockinPendingEmployee;
+  _clockinPendingEmployee = null;
+  if (!emp) return;
+  await executeClockin(emp, reason);
+}
+
+// ── Clock In
+async function executeClockin(emp, note) {
+  const today = localDateStr(new Date());
+  const now   = new Date().toISOString();
+  const shift = shifts.find(s => s.employee_id === emp.id && s.date === today);
+
+  let ts = timesheets.find(t => t.employee_id === emp.id && t.date === today);
+  if (!ts) {
+    ts = {
+      id:           uid(),
+      employee_id:  emp.id,
+      date:         today,
+      start_time:   shift?.start_time || new Date().toTimeString().slice(0,5),
+      end_time:     shift?.end_time   || null,
+      break_mins:   null,
+      status:       'pending',
+      entry_method: 'clock',
+      created_at:   now,
+    };
+  }
+
+  ts.clock_in      = now;
+  ts.entry_method  = 'clock';
+  ts.clock_in_note = note || null;
+  ts.updated_at    = now;
+
+  await dbSaveTimesheet(ts);
+  renderClockInPage();
+  toast(`${emp.first_name} clocked in ✓`);
+}
+
+// ── Break Start
+async function executeBreakStart(emp, ts) {
+  if (!ts) return;
+  ts.break_start = new Date().toISOString();
+  ts.updated_at  = new Date().toISOString();
+  await dbSaveTimesheet(ts);
+  renderClockInPage();
+  toast(`${emp.first_name} started break ✓`);
+}
+
+// ── Break End
+async function executeBreakEnd(emp, ts) {
+  if (!ts || !ts.break_start) return;
+  const breakStart = new Date(ts.break_start);
+  const breakMins  = Math.round((Date.now() - breakStart.getTime()) / 60000);
+  ts.break_end   = new Date().toISOString();
+  ts.break_mins  = (ts.break_mins || 0) + breakMins;
+  ts.updated_at  = new Date().toISOString();
+  await dbSaveTimesheet(ts);
+  renderClockInPage();
+  toast(`${emp.first_name} break ended · ${breakMins}min ✓`);
+}
+
+// ── Clock Out
+async function executeClockout(emp, ts) {
+  if (!ts) return;
+  const now    = new Date();
+  const endTime = now.toTimeString().slice(0, 5);
+
+  // If still on break, end it first
+  if (ts.break_start && !ts.break_end) {
+    const breakMins = Math.round((now - new Date(ts.break_start)) / 60000);
+    ts.break_end  = now.toISOString();
+    ts.break_mins = (ts.break_mins || 0) + breakMins;
+  }
+
+  ts.clock_out  = now.toISOString();
+  ts.end_time   = endTime;
+  ts.updated_at = now.toISOString();
+
+  await dbSaveTimesheet(ts);
+  renderClockInPage();
+  toast(`${emp.first_name} clocked out ✓`);
+}
+
+// ══════════════════════════════════════════════════════
+//  MANUAL TIMESHEET ENTRY (manager use — forgot to clock in)
+// ══════════════════════════════════════════════════════
+
+function openManualTimesheetModal() {
+  // Populate employee dropdown
+  const sel = document.getElementById('manual-ts-employee');
+  if (sel) {
+    sel.innerHTML = employees
+      .filter(e => e.active !== false)
+      .sort((a, b) => a.first_name.localeCompare(b.first_name))
+      .map(e => `<option value="${e.id}">${e.first_name} ${e.last_name}</option>`)
+      .join('');
+  }
+
+  // Default date to today
+  const dateEl = document.getElementById('manual-ts-date');
+  if (dateEl) dateEl.value = localDateStr(new Date());
+
+  // Clear fields
+  document.getElementById('manual-ts-start').value = '';
+  document.getElementById('manual-ts-end').value   = '';
+  document.getElementById('manual-ts-break').value = '';
+  document.getElementById('manual-ts-note').value  = '';
+  document.getElementById('manual-ts-msg').textContent = '';
+
+  document.getElementById('manual-ts-modal').classList.add('show');
+}
+
+async function saveManualTimesheet() {
+  const empId    = document.getElementById('manual-ts-employee').value;
+  const date     = document.getElementById('manual-ts-date').value;
+  const start    = document.getElementById('manual-ts-start').value;
+  const end      = document.getElementById('manual-ts-end').value;
+  const breakMin = parseInt(document.getElementById('manual-ts-break').value) || null;
+  const note     = document.getElementById('manual-ts-note').value.trim();
+  const msgEl    = document.getElementById('manual-ts-msg');
+
+  if (!empId || !date || !start || !end) {
+    msgEl.textContent = 'Employee, date, start and end time are all required.';
+    return;
+  }
+
+  // Check for duplicate
+  const existing = timesheets.find(t => t.employee_id === empId && t.date === date);
+  if (existing) {
+    msgEl.textContent = 'A timesheet entry already exists for this employee on this date.';
+    return;
+  }
+
+  const ts = {
+    id:           uid(),
+    employee_id:  empId,
+    date,
+    start_time:   start,
+    end_time:     end,
+    break_mins:   breakMin ?? calcBreakMins(
+      (parseInt(end.split(':')[0]) * 60 + parseInt(end.split(':')[1]) -
+       parseInt(start.split(':')[0]) * 60 - parseInt(start.split(':')[1])) / 60
+    ) || null,
+    status:       'pending',
+    entry_method: 'manual',
+    clock_in_note: note || 'Manual entry by manager',
+    created_at:   new Date().toISOString(),
+  };
+
+  await dbSaveTimesheet(ts);
+  document.getElementById('manual-ts-modal').classList.remove('show');
+  renderTimesheets();
+  toast('Timesheet entry added ✓');
 }
