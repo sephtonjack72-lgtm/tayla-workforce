@@ -644,6 +644,12 @@ function openAccountSettings(tab = 'profile') {
   switchAcctTab(tab);
   document.getElementById('account-modal')?.classList.add('show');
   if (tab === 'team') loadTeamList();
+
+  // Always enforce billing tab visibility based on current context
+  const billingTab = document.getElementById('acct-tab-billing');
+  if (billingTab) billingTab.style.display = (_userRole === 'owner' && _businessId === _ownerBusinessId) ? '' : 'none';
+  // If billing tab is hidden but selected, switch to profile
+  if (tab === 'billing' && _businessId !== _ownerBusinessId) switchAcctTab('profile');
 }
 
 function switchAcctTab(tab) {
