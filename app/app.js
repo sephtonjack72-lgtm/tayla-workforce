@@ -459,6 +459,9 @@ async function applyProfile(profile) {
     checkTierNotification();
   }
 
+  // Apply PWA mode if running as installed app
+  if (isPWA()) applyPWAMode();
+
   // Populate leave employee select
   populateLeaveEmployeeSelect();
 
@@ -599,6 +602,63 @@ function markTimesheetsLoaded(weekStart, weekEnd) {
 // ══════════════════════════════════════════════════════
 //  NAVIGATION — instant, from memory only
 // ══════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════
+//  PWA MODE
+//  When running as installed PWA, show only Dashboard
+//  and Clock In — hide all other tabs and header chrome
+// ══════════════════════════════════════════════════════
+
+function isPWA() {
+  return window.matchMedia('(display-mode: standalone)').matches ||
+         window.navigator.standalone === true;
+}
+
+function applyPWAMode() {
+  // Add PWA class to body for CSS targeting
+  document.body.classList.add('pwa-mode');
+
+  // Hide all nav tabs except dashboard and clockin
+  const allTabs = document.querySelectorAll('.tab');
+  allTabs.forEach(tab => {
+    const page = tab.getAttribute('data-page');
+    if (page !== 'dashboard' && page !== 'clockin') {
+      tab.style.display = 'none';
+    }
+  });
+
+  // Hide franchise switcher — not needed on tablet clock-in device
+  const switcherWrap = document.getElementById('franchise-switcher-wrap');
+  if (switcherWrap) switcherWrap.style.display = 'none';
+
+  // Hide account/user menu — shared tablet shouldn't expose account settings
+  const userMenuWrap = document.getElementById('user-menu-wrap');
+  if (userMenuWrap) userMenuWrap.style.display = 'none';
+
+  // Hide billing banner — not relevant on clock-in device
+  const billingBanner = document.getElementById('billing-banner');
+  if (billingBanner) billingBanner.style.display = 'none';
+
+  // Go straight to Clock In tab as default landing page
+  showPage('clockin');
+
+  // Simplify dashboard — only show today's shifts section
+  applyPWADashboard();
+}
+
+function applyPWADashboard() {
+  // Hide KPI grid, franchise analytics, sales chart on dashboard
+  // Only keep Today's Shifts and Upcoming Public Holidays
+  const kpiGrid = document.getElementById('dash-kpis');
+  if (kpiGrid) kpiGrid.style.display = 'none';
+
+  const franchiseAnalytics = document.getElementById('franchise-analytics');
+  if (franchiseAnalytics) franchiseAnalytics.style.display = 'none';
+
+  // Hide the analytics sub-tabs
+  const analyticsSubnav = document.querySelector('.analytics-subnav');
+  if (analyticsSubnav) analyticsSubnav.style.display = 'none';
+}
 
 function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
