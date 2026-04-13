@@ -606,7 +606,7 @@ function applyRoleGating() {
   const billingTab = document.getElementById('acct-tab-billing');
   if (teamTab)    teamTab.style.display    = canAccess('team') ? '' : 'none';
   if (bizTab)     bizTab.style.display     = canAccess('business') ? '' : 'none';
-  if (billingTab) billingTab.style.display = _userRole === 'owner' ? '' : 'none';
+  if (billingTab) billingTab.style.display = (_userRole === 'owner' && _businessId === _ownerBusinessId) ? '' : 'none';
 }
 
 // ══════════════════════════════════════════════════════
