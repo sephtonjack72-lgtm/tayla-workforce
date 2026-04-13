@@ -766,6 +766,17 @@
         </div>
         <div id="acct-profile-msg" style="margin-top:10px;font-size:12px;min-height:18px;"></div>
         <button class="btn btn-primary" style="margin-top:16px;" onclick="saveProfile()">Save Changes</button>
+
+        <!-- Cancel Subscription — owner only -->
+        <div id="cancel-subscription-section" style="display:none;margin-top:32px;padding-top:20px;border-top:1px solid var(--border);">
+          <div style="font-weight:700;font-size:13px;margin-bottom:6px;color:var(--danger);">Danger Zone</div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.6;">
+            Cancelling your subscription will end your access at the end of your current billing period. Your data is retained for 7 years for compliance.
+          </div>
+          <button class="btn btn-ghost btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="openCancelSubscriptionModal()">
+            Cancel Subscription
+          </button>
+        </div>
       </div>
 
       <!-- Team tab -->
@@ -985,6 +996,42 @@
       <button class="btn btn-ghost btn-sm" onclick="document.getElementById('superstream-modal').classList.remove('show')">✕</button>
     </div>
     <div id="superstream-summary"></div>
+  </div>
+</div>
+
+<!-- Cancel Subscription Modal -->
+<div class="modal-overlay" id="cancel-subscription-modal">
+  <div class="modal" style="max-width:480px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h3 style="margin:0;color:var(--danger);">Cancel Subscription</h3>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cancel-subscription-modal').classList.remove('show')">✕</button>
+    </div>
+
+    <div style="font-size:13px;margin-bottom:20px;line-height:1.7;">
+      <div style="font-weight:600;margin-bottom:12px;">Before you cancel, here's what happens:</div>
+      <div style="margin-bottom:8px;">✓ &nbsp;Your subscription ends at the <strong>end of your current billing period</strong></div>
+      <div style="margin-bottom:8px;">✓ &nbsp;You retain <strong>full access</strong> until then</div>
+      <div style="margin-bottom:8px;">✓ &nbsp;All data is retained for <strong>7 years</strong> (ATO &amp; Fair Work compliance)</div>
+      <div style="margin-bottom:16px;">✓ &nbsp;You can <strong>reactivate anytime</strong> — your data will be waiting</div>
+      <div style="margin-bottom:8px;color:var(--danger);">✗ &nbsp;Rostering, timesheets, payroll and editing will be disabled after billing ends</div>
+      <div style="margin-bottom:8px;color:var(--danger);">✗ &nbsp;Employees will no longer receive payslips</div>
+      <div style="color:var(--danger);">✗ &nbsp;STP2 submissions will stop</div>
+    </div>
+
+    <div style="padding:14px;background:rgba(229,62,62,.06);border-radius:8px;border:1px solid rgba(229,62,62,.2);margin-bottom:20px;">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:8px;">To confirm, type your business name below:</div>
+      <input type="text" id="cancel-confirm-input" class="form-input" placeholder="Type your business name to confirm">
+      <div id="cancel-confirm-msg" style="font-size:11px;color:var(--danger);margin-top:6px;min-height:16px;"></div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button class="btn btn-primary" onclick="document.getElementById('cancel-subscription-modal').classList.remove('show')">
+        Keep My Subscription
+      </button>
+      <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="confirmCancelSubscription()">
+        Cancel Subscription
+      </button>
+    </div>
   </div>
 </div>
 
