@@ -44,22 +44,31 @@ const RATE_ROWS = [
   { key: 'overtime2',     label: 'Overtime (after 2hrs)',    desc: 'Permanent/part-time only' },
 ];
 
-// ── Current award mode: 'ma000003' or 'custom'
+// ── Current award mode
 let _awardMode = 'ma000003';
 let _customAward = null; // loaded from _businessProfile
+
+// ── All selectable awards
+const AWARD_OPTIONS = [
+  { value: 'ma000003', label: 'MA000003 — Fast Food Industry Award' },
+  { value: 'ma000009', label: 'MA000009 — Hospitality Industry (General) Award (HIGA)' },
+  { value: 'ma000119', label: 'MA000119 — Restaurant Industry Award (RIA)' },
+  { value: 'ma000004', label: 'MA000004 — General Retail Industry Award' },
+  { value: 'ma000058', label: 'MA000058 — Registered & Licensed Clubs Award' },
+  { value: 'ma000005', label: 'MA000005 — Hair & Beauty Industry Award' },
+  { value: 'custom',   label: '✏️ Custom Award / Manual Rates' },
+];
 
 // ══════════════════════════════════════════════════════
 //  INITIALISE
 // ══════════════════════════════════════════════════════
 
 function initAwardPage() {
-  // Load saved custom award from business profile
   _customAward = (_businessProfile?.custom_award)
     ? JSON.parse(JSON.stringify(_businessProfile.custom_award))
     : JSON.parse(JSON.stringify(DEFAULT_CUSTOM_AWARD));
 
   _awardMode = _businessProfile?.award_type || 'ma000003';
-
   renderAwardPage();
 }
 
@@ -71,67 +80,64 @@ function renderAwardPage() {
   const container = document.getElementById('awards-page-content');
   if (!container) return;
 
-  const isMa = _awardMode === 'ma000003';
+  const isCustom   = _awardMode === 'custom';
+  const isActive   = _businessProfile?.award_type === _awardMode;
+  const activeLabel = AWARD_OPTIONS.find(o => o.value === (_businessProfile?.award_type || 'ma000003'))?.label || 'MA000003';
 
   container.innerHTML = `
-    <!-- Mode Toggle -->
-    <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
-      <button
-        class="btn ${isMa ? 'btn-primary' : 'btn-ghost'}"
-        onclick="setAwardMode('ma000003')"
-        style="font-size:13px;">
-        📋 Fast Food Award MA000003
-      </button>
-      <button
-        class="btn ${!isMa ? 'btn-primary' : 'btn-ghost'}"
-        onclick="setAwardMode('custom')"
-        style="font-size:13px;">
-        ✏️ Custom Award / Manual Rates
-      </button>
-      ${_awardMode === 'custom' && _businessProfile?.award_type === 'custom' ? `
-        <span style="display:flex;align-items:center;font-size:12px;color:var(--success);gap:4px;">
-          ✓ Custom award active
-        </span>` : ''}
-      ${isMa && _businessProfile?.award_type === 'ma000003' ? `
-        <span style="display:flex;align-items:center;font-size:12px;color:var(--success);gap:4px;">
-          ✓ MA000003 active
-        </span>` : ''}
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px;">
+      <div style="font-weight:700;font-size:14px;margin-bottom:14px;">Select Award</div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <select id="award-selector" class="form-input" style="max-width:480px;font-size:13px;"
+          onchange="setAwardMode(this.value)">
+          ${AWARD_OPTIONS.map(o => `
+            <option value="${o.value}" ${_awardMode === o.value ? 'selected' : ''}>${o.label}</option>
+          `).join('')}
+        </select>
+        ${isActive
+          ? `<span style="font-size:12px;color:var(--success);font-weight:600;">✓ Currently active</span>`
+          : `<button class="btn btn-primary btn-sm" onclick="saveAward('${_awardMode}')">Save &amp; Activate</button>`
+        }
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-top:10px;">
+        Active: <strong>${activeLabel}</strong>
+      </div>
     </div>
 
-    ${isMa ? renderMA000003View() : renderCustomAwardEditor()}
+    ${isCustom ? renderCustomAwardEditor() : renderAwardSummaryView(_awardMode)}
   `;
 }
 
-// ── MA000003 read-only summary
-function renderMA000003View() {
-  const perm = PENALTIES.permanent;
-  const cas  = PENALTIES.casual;
+function renderAwardSummaryView(awardKey) {
+  const award = typeof AWARD_DATA !== 'undefined' && AWARD_DATA[awardKey];
+  if (!award) return '<div style="color:var(--text3);padding:20px;">Award data not found.</div>';
 
-  const rateRow = (label, pKey) => `
-    <tr>
-      <td style="font-weight:500;">${label}</td>
-      <td class="mono" style="text-align:center;">${(perm[pKey] * 100).toFixed(0)}%</td>
-      <td class="mono" style="text-align:center;">${fmt(AWARD_BASE_RATE * perm[pKey])}/hr</td>
-      <td class="mono" style="text-align:center;">${(cas[pKey] * 100).toFixed(0)}%</td>
-      <td class="mono" style="text-align:center;">${fmt(AWARD_BASE_RATE * (cas[pKey] || cas.ordinary))}/hr</td>
-    </tr>`;
+  const perm = award.permanent;
+  const cas  = award.casual;
+
+  const rateRow = (label, pKey) => {
+    const casRate = cas[pKey];
+    return `
+      <tr>
+        <td style="font-weight:500;">${label}</td>
+        <td class="mono" style="text-align:center;">${(perm[pKey] * 100).toFixed(0)}%</td>
+        <td class="mono" style="text-align:center;">${fmt(award.base_rate * perm[pKey])}/hr</td>
+        <td class="mono" style="text-align:center;">${casRate != null ? (casRate * 100).toFixed(0) + '%' : '—'}</td>
+        <td class="mono" style="text-align:center;">${casRate != null ? fmt(award.base_rate * casRate) + '/hr' : '—'}</td>
+      </tr>`;
+  };
 
   return `
     <div class="card" style="margin-bottom:20px;">
       <div class="card-header flex-between">
-        <span class="card-title">Fast Food Industry Award — MA000003</span>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:11px;color:var(--text3);">FY2024-25 · Level 1 Adult · Read-only</span>
-          ${_businessProfile?.award_type === 'custom' ? `
-            <button id="ma-save-btn" class="btn btn-accent btn-sm" onclick="saveMa000003Award()">💾 Save & Activate</button>
-          ` : `<span style="font-size:11px;color:var(--success);font-weight:600;">✓ Active</span>`}
-        </div>
+        <span class="card-title">${award.name}</span>
+        <span style="font-size:11px;color:var(--text3);">1 July 2025 · Level 1 Adult · Read-only</span>
       </div>
       <div class="card-body">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px;">
-          <div class="kpi"><div class="kpi-label">Base Rate</div><div class="kpi-value">${fmt(AWARD_BASE_RATE)}/hr</div></div>
+          <div class="kpi"><div class="kpi-label">Base Rate</div><div class="kpi-value">${fmt(award.base_rate)}/hr</div></div>
           <div class="kpi"><div class="kpi-label">Casual Loading</div><div class="kpi-value">25%</div></div>
-          <div class="kpi"><div class="kpi-label">Min. Engagement</div><div class="kpi-value">3 hrs</div></div>
+          <div class="kpi"><div class="kpi-label">Min. Engagement</div><div class="kpi-value">${award.min_engagement_hours} hrs</div></div>
         </div>
         <div class="table-wrap">
           <table>
@@ -146,34 +152,33 @@ function renderMA000003View() {
             </thead>
             <tbody>
               ${rateRow('Ordinary Time', 'ordinary')}
-              ${rateRow('Early Morning (before 7am)', 'earlyMorning')}
-              ${rateRow('Late Night (after 10pm)', 'lateNight')}
+              ${rateRow('Early Morning (before ' + award.early_morning_before + ':00)', 'earlyMorning')}
+              ${rateRow('Evening / Late Night (after ' + award.late_night_after + ':00)', 'lateNight')}
               ${rateRow('Saturday', 'saturday')}
               ${rateRow('Sunday', 'sunday')}
               ${rateRow('Public Holiday', 'publicHoliday')}
               <tr>
                 <td style="font-weight:500;">Overtime — First 2hrs</td>
                 <td class="mono" style="text-align:center;">${(perm.overtime1 * 100).toFixed(0)}%</td>
-                <td class="mono" style="text-align:center;">${fmt(AWARD_BASE_RATE * perm.overtime1)}/hr</td>
+                <td class="mono" style="text-align:center;">${fmt(award.base_rate * perm.overtime1)}/hr</td>
                 <td colspan="2" style="text-align:center;color:var(--text3);font-size:12px;">Not applicable</td>
               </tr>
               <tr>
                 <td style="font-weight:500;">Overtime — After 2hrs</td>
                 <td class="mono" style="text-align:center;">${(perm.overtime2 * 100).toFixed(0)}%</td>
-                <td class="mono" style="text-align:center;">${fmt(AWARD_BASE_RATE * perm.overtime2)}/hr</td>
+                <td class="mono" style="text-align:center;">${fmt(award.base_rate * perm.overtime2)}/hr</td>
                 <td colspan="2" style="text-align:center;color:var(--text3);font-size:12px;">Not applicable</td>
               </tr>
             </tbody>
           </table>
         </div>
         <div style="margin-top:16px;padding:12px 14px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text2);">
-          <strong>Break Rules:</strong> Paid 10-min rest break for shifts ≥4hrs · Unpaid 30-min meal break for shifts >5hrs ·
-          Junior rates apply for employees under 21 · Laundry allowance $1.25/day (capped $6.25/wk)
+          <strong>Notes:</strong> ${award.notes}
+        </div>
+        <div style="margin-top:10px;padding:12px 14px;background:rgba(229,62,62,.06);border:1px solid rgba(229,62,62,.15);border-radius:8px;font-size:12px;color:var(--text2);">
+          ⚠ Rates shown are indicative for 1 July 2025. Always verify with the Fair Work Ombudsman Pay and Conditions Tool before processing payroll.
         </div>
       </div>
-    </div>
-    <div style="padding:16px 20px;background:rgba(61,90,254,.06);border:1px solid rgba(61,90,254,.15);border-radius:10px;font-size:13px;color:var(--text2);">
-      💡 Not on the Fast Food Award? Switch to <strong>Custom Award</strong> above to define your own pay structure.
     </div>
   `;
 }
@@ -335,24 +340,26 @@ function setAwardMode(mode) {
   renderAwardPage();
 }
 
-async function saveMa000003Award() {
+async function saveAward(awardKey) {
   if (!_businessId) { toast('Not connected'); return; }
-  const btn = document.getElementById('ma-save-btn');
-  if (btn) { btn.textContent = 'Saving…'; btn.disabled = true; }
 
-  const { error } = await _supabase.from('businesses').update({
-    award_type: 'ma000003',
-  }).eq('id', _businessId);
-
-  if (error) {
-    toast('⚠ Save failed: ' + error.message);
-    if (btn) { btn.textContent = '✓ Save & Activate MA000003'; btn.disabled = false; }
+  const isCustom = awardKey === 'custom';
+  if (isCustom) {
+    await saveCustomAward();
     return;
   }
 
-  _businessProfile.award_type = 'ma000003';
-  _awardMode = 'ma000003';
-  toast('Fast Food Award MA000003 activated ✓');
+  const { error } = await _supabase.from('businesses').update({
+    award_type: awardKey,
+  }).eq('id', _businessId);
+
+  if (error) { toast('⚠ Save failed: ' + error.message); return; }
+
+  _businessProfile.award_type = awardKey;
+  _awardMode = awardKey;
+
+  const label = AWARD_OPTIONS.find(o => o.value === awardKey)?.label || awardKey;
+  toast(label + ' activated ✓');
   renderAwardPage();
 }
 
