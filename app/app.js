@@ -806,6 +806,10 @@ function openAccountSettings(tab = 'profile') {
   const linkedEl = document.getElementById('biz-linked-business-input');
   if (linkedEl) linkedEl.value = _businessProfile?.linked_business_id || '';
 
+  // Show cancel subscription section for owners at head office only
+  const cancelSection = document.getElementById('cancel-subscription-section');
+  if (cancelSection) cancelSection.style.display = (_userRole === 'owner' && _businessId === _ownerBusinessId) ? 'block' : 'none';
+
   switchAcctTab(tab);
   document.getElementById('account-modal')?.classList.add('show');
   if (tab === 'team') loadTeamList();
@@ -1447,6 +1451,61 @@ async function loadSuperPaymentHistory() {
       </tbody>
     </table>
   `;
+}
+
+// ══════════════════════════════════════════════════════
+//  CANCEL SUBSCRIPTION
+// ══════════════════════════════════════════════════════
+
+function openCancelSubscriptionModal() {
+  document.getElementById('cancel-confirm-input').value = '';
+  document.getElementById('cancel-confirm-msg').textContent = '';
+  document.getElementById('cancel-subscription-modal').classList.add('show');
+}
+
+async function confirmCancelSubscription() {
+  const input   = document.getElementById('cancel-confirm-input').value.trim();
+  const msgEl   = document.getElementById('cancel-confirm-msg');
+  const bizName = _businessProfile?.biz_name || '';
+
+  if (input.toLowerCase() !== bizName.toLowerCase()) {
+    msgEl.textContent = `Business name doesn't match. Please type "${bizName}" exactly.`;
+    return;
+  }
+
+  msgEl.textContent = '';
+  const btn = document.querySelector('#cancel-subscription-modal .btn-ghost');
+  if (btn) { btn.textContent = 'Cancelling…'; btn.disabled = true; }
+
+  try {
+    // Cancel via Stripe — set cancel_at_period_end so access continues until billing cycle ends
+    const { data: { session } } = await _supabase.auth.getSession();
+    const token = session?.access_token;
+
+    const res  = await fetch(`https://whedwekxzjfqwjuoarid.supabase.co/functions/v1/create-checkout`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body:    JSON.stringify({ action: 'cancel' }),
+    });
+    const data = await res.json();
+
+    if (data.error) throw new Error(data.error);
+
+    // Mark business as cancellation pending in DB
+    await _supabase.from('businesses').update({
+      status:       'cancellation_pending',
+      cancelled_at: new Date().toISOString(),
+    }).eq('id', _businessId);
+
+    document.getElementById('cancel-subscription-modal').classList.remove('show');
+    document.getElementById('account-modal').classList.remove('show');
+
+    toast('Subscription cancelled — you retain full access until your billing period ends.');
+
+  } catch (err) {
+    msgEl.textContent = 'Error: ' + err.message;
+    if (btn) { btn.textContent = 'Cancel Subscription'; btn.disabled = false; }
+  }
 }
 
 async function loadBillingPanel() {
