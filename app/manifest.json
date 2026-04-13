@@ -5,8 +5,9 @@
   "start_url": "/app/",
   "scope": "/app/",
   "display": "standalone",
-  "orientation": "portrait-primary",
-  "background_color": "#0f1623",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#1a1a2e",
   "theme_color": "#1a1a2e",
   "categories": ["business", "productivity"],
   "icons": [
