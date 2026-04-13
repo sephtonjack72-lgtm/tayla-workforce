@@ -959,10 +959,10 @@ async function saveManualTimesheet() {
     date,
     start_time:   start,
     end_time:     end,
-    break_mins:   breakMin ?? calcBreakMins(
+    break_mins:   breakMin != null ? breakMin : (calcBreakMins(
       (parseInt(end.split(':')[0]) * 60 + parseInt(end.split(':')[1]) -
        parseInt(start.split(':')[0]) * 60 - parseInt(start.split(':')[1])) / 60
-    ) || null,
+    ) || null),
     status:       'pending',
     entry_method: 'manual',
     clock_in_note: note || 'Manual entry by manager',
