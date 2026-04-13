@@ -454,6 +454,11 @@ async function applyProfile(profile) {
   // Show billing banner if needed
   showBillingBanner();
 
+  // Check for pending tier change notification (owner only)
+  if (_userRole === 'owner' && _businessId === _ownerBusinessId) {
+    checkTierNotification();
+  }
+
   // Populate leave employee select
   populateLeaveEmployeeSelect();
 
@@ -1090,6 +1095,7 @@ async function loadFranchiseList() {
           <div style="font-size:11px;color:var(--text3);">${f.abn ? 'ABN: ' + f.abn + ' · ' : ''}${f.address || ''}</div>
         </div>
         <button class="btn btn-ghost btn-sm" onclick="inviteToFranchise('${f.id}','${f.biz_name.replace(/'/g,"\\'")}')">Invite User</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="openRemoveFranchiseModal('${f.id}','${f.biz_name.replace(/'/g,"\\'")}')">Remove</button>
       </div>
       <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);">
         <div style="flex:1;">
@@ -1108,6 +1114,160 @@ async function loadFranchiseList() {
       </div>
     </div>
   `).join('');
+}
+
+// ══════════════════════════════════════════════════════
+//  FRANCHISE BILLING WARNINGS
+// ══════════════════════════════════════════════════════
+
+function getTierInfo(empCount) {
+  if (empCount <= 15) return { name: 'Starter', base: 29 };
+  if (empCount <= 50) return { name: 'Growth',  base: 59 };
+  return { name: 'Enterprise', base: 79 };
+}
+
+async function getTotalEmployeeCount() {
+  // Count active employees across all franchises
+  let total = 0;
+  const allBizIds = [_ownerBusinessId, ..._franchises.map(f => f.id)].filter(Boolean);
+  for (const bizId of allBizIds) {
+    const { count } = await _supabase
+      .from('employees')
+      .select('*', { count: 'exact', head: true })
+      .eq('business_id', bizId)
+      .eq('active', true);
+    total += count || 0;
+  }
+  return total;
+}
+
+async function openAddFranchiseWarning() {
+  const empCount        = await getTotalEmployeeCount();
+  const extraFranchises = Math.max(0, _franchises.length - 1); // current extras (first included)
+  const newExtras       = extraFranchises + 1; // after adding
+  const tier            = getTierInfo(empCount);
+  const currentCost     = tier.base + (empCount * 6) + (extraFranchises * 10);
+  const newCost         = tier.base + (empCount * 6) + (newExtras * 10);
+
+  document.getElementById('add-franchise-warning-content').innerHTML = `
+    <div style="padding:14px;background:var(--surface2);border-radius:10px;margin-bottom:16px;">
+      <div style="font-weight:600;margin-bottom:10px;">Billing impact</div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">
+        <span>Current monthly cost</span><span style="font-weight:600;">$${currentCost.toFixed(2)} AUD</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">
+        <span>Additional location</span><span style="font-weight:600;color:var(--danger);">+$10.00</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0;font-weight:700;color:var(--accent);">
+        <span>New monthly cost</span><span>$${newCost.toFixed(2)} AUD</span>
+      </div>
+    </div>
+    <div style="color:var(--text2);">
+      ✓ &nbsp;The new location will appear in your Head Office analytics<br>
+      ✓ &nbsp;You can invite team members to the new location<br>
+      ✓ &nbsp;Billing updates on your next invoice
+    </div>
+  `;
+  document.getElementById('add-franchise-warning-modal').classList.add('show');
+}
+
+let _removeFranchiseId   = null;
+let _removeFranchiseName = '';
+
+async function openRemoveFranchiseModal(franchiseId, franchiseName) {
+  _removeFranchiseId   = franchiseId;
+  _removeFranchiseName = franchiseName;
+
+  const empCount        = await getTotalEmployeeCount();
+  const extraFranchises = Math.max(0, _franchises.length - 1);
+  const newExtras       = Math.max(0, extraFranchises - 1);
+  const tier            = getTierInfo(empCount);
+  const currentCost     = tier.base + (empCount * 6) + (extraFranchises * 10);
+  const newCost         = tier.base + (empCount * 6) + (newExtras * 10);
+
+  document.getElementById('remove-franchise-confirm-input').value = '';
+  document.getElementById('remove-franchise-confirm-msg').textContent = '';
+
+  document.getElementById('remove-franchise-warning-content').innerHTML = `
+    <div style="padding:14px;background:var(--surface2);border-radius:10px;margin-bottom:16px;">
+      <div style="font-weight:600;margin-bottom:6px;">Removing: ${franchiseName}</div>
+      <div style="font-size:12px;color:var(--text3);">This will disconnect the location from Head Office.</div>
+    </div>
+    <div style="margin-bottom:14px;color:var(--text2);">
+      ✓ &nbsp;All employees, shifts, timesheets and payslips are <strong>retained for 7 years</strong><br>
+      ✓ &nbsp;Monthly bill reduces by <strong>$10.00</strong> (from $${currentCost.toFixed(2)} to $${newCost.toFixed(2)})<br>
+      ✗ &nbsp;The location will no longer appear in Head Office analytics<br>
+      ✗ &nbsp;Team members assigned to this location will lose access
+    </div>
+  `;
+  document.getElementById('remove-franchise-modal').classList.add('show');
+}
+
+async function confirmRemoveFranchise() {
+  const input = document.getElementById('remove-franchise-confirm-input').value.trim();
+  const msgEl = document.getElementById('remove-franchise-confirm-msg');
+
+  if (input.toLowerCase() !== _removeFranchiseName.toLowerCase()) {
+    msgEl.textContent = `Name doesn't match. Please type "${_removeFranchiseName}" exactly.`;
+    return;
+  }
+
+  msgEl.textContent = '';
+  const btn = document.querySelector('#remove-franchise-modal .btn-ghost[style*="danger"]');
+  if (btn) { btn.textContent = 'Removing…'; btn.disabled = true; }
+
+  // Disconnect franchise from head office (don't delete data)
+  const { error } = await _supabase
+    .from('businesses')
+    .update({ parent_business_id: null })
+    .eq('id', _removeFranchiseId);
+
+  if (error) {
+    msgEl.textContent = 'Error: ' + error.message;
+    if (btn) { btn.textContent = 'Remove Location'; btn.disabled = false; }
+    return;
+  }
+
+  // Remove from local state
+  _franchises = _franchises.filter(f => f.id !== _removeFranchiseId);
+  renderFranchiseSwitcher();
+
+  document.getElementById('remove-franchise-modal').classList.remove('show');
+  toast(`${_removeFranchiseName} removed from Head Office ✓`);
+  loadFranchiseList();
+  _removeFranchiseId   = null;
+  _removeFranchiseName = '';
+}
+
+// ── Tier change notification — shown to owner on next login
+async function checkTierNotification() {
+  if (_userRole !== 'owner' || _businessId !== _ownerBusinessId) return;
+  if (!_businessProfile?.pending_tier_notification) return;
+
+  const notif = _businessProfile.pending_tier_notification;
+  document.getElementById('tier-change-content').innerHTML = `
+    <div style="padding:14px;background:var(--surface2);border-radius:10px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">
+        <span>Previous plan</span><span style="font-weight:600;">${notif.oldTier} — $${notif.oldBase}/month</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:700;color:var(--accent);">
+        <span>New plan</span><span>${notif.newTier} — $${notif.newBase}/month</span>
+      </div>
+    </div>
+    <div style="color:var(--text2);">
+      Your team has grown to <strong>${notif.empCount} employees</strong> across all locations,
+      moving you to the <strong>${notif.newTier}</strong> plan.<br><br>
+      Your next invoice will reflect the updated pricing.
+    </div>
+  `;
+  document.getElementById('tier-change-modal').classList.add('show');
+}
+
+async function clearTierNotification() {
+  await _supabase.from('businesses')
+    .update({ pending_tier_notification: null })
+    .eq('id', _ownerBusinessId);
+  _businessProfile.pending_tier_notification = null;
 }
 
 async function createFranchise() {
