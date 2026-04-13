@@ -75,10 +75,6 @@ header {
 }
 
 /* Remove the broken direct safe-area rule */
-header > * {
-  display: flex;
-  align-items: center;
-}
 .logo {
   font-family: 'DM Serif Display', serif;
   font-size: 20px;
