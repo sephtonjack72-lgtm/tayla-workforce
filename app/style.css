@@ -45,16 +45,32 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
 header {
   background: var(--accent);
   padding: 0 28px;
-  padding-top: env(safe-area-inset-top);
-  height: calc(56px + env(safe-area-inset-top));
+  height: 56px;
   display: flex;
-  align-items: flex-end;
-  padding-bottom: 0;
+  align-items: center;
   justify-content: space-between;
   position: sticky;
   top: 0;
   z-index: 100;
   box-shadow: 0 2px 16px rgba(26,26,46,.2);
+}
+
+/* iPhone notch/status bar — push everything below the safe area */
+@supports (padding-top: env(safe-area-inset-top)) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    background-color: var(--accent); /* match header so safe area fill looks correct */
+  }
+  /* Reset padding on main content area */
+  main {
+    background: var(--bg);
+  }
+}
+
+/* Remove the broken direct safe-area rule */
+header > * {
+  display: flex;
+  align-items: center;
 }
 .logo {
   font-family: 'DM Serif Display', serif;
