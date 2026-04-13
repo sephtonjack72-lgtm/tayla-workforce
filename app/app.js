@@ -14,6 +14,7 @@ let _businessId      = null;
 let _userRole        = null; // 'owner' | 'franchise' | 'manager' | 'payroll_officer'
 let _ownerBusinessId = null; // owner's root business
 let _franchises      = [];   // child franchise businesses
+let _payFrequency    = 'weekly'; // 'weekly' | 'fortnightly' | 'monthly'
 
 // ── Loaded range tracking — prevents redundant Supabase fetches
 let _shiftsLoadedRange     = null; // e.g. '2026-03-30:2026-04-05'
@@ -261,7 +262,8 @@ function showInviteErrorScreen() {
 }
 
 async function applyProfile(profile) {
-  _businessId = profile.id;
+  _businessId      = profile.id;
+  _payFrequency    = profile.pay_frequency || 'weekly';
 
   // Set linked Business account ID for sales mirroring
   if (typeof _linkedBusinessId !== 'undefined') {
@@ -625,6 +627,7 @@ function openAccountSettings(tab = 'profile') {
   // Populate business tab
   document.getElementById('biz-name-input').value         = _businessProfile?.biz_name      || '';
   document.getElementById('biz-abn-input').value          = _businessProfile?.abn            || '';
+  document.getElementById('biz-pay-frequency-input').value = _businessProfile?.pay_frequency || 'weekly';
   document.getElementById('biz-address-street-input').value  = _businessProfile?.address_street  || '';
   document.getElementById('biz-address-suburb-input').value  = _businessProfile?.address_suburb  || '';
   document.getElementById('biz-address-state-input').value   = _businessProfile?.address_state   || '';
@@ -703,6 +706,7 @@ async function saveBusinessSettings() {
   const updates = {
     biz_name:          document.getElementById('biz-name-input').value.trim(),
     abn:               document.getElementById('biz-abn-input').value.trim(),
+    pay_frequency:     document.getElementById('biz-pay-frequency-input').value,
     address_street:    document.getElementById('biz-address-street-input').value.trim(),
     address_suburb:    document.getElementById('biz-address-suburb-input').value.trim(),
     address_state:     document.getElementById('biz-address-state-input').value.trim(),
@@ -717,6 +721,7 @@ async function saveBusinessSettings() {
   if (error) { msgEl.textContent = error.message; return; }
 
   _businessProfile = { ..._businessProfile, ...updates };
+  _payFrequency    = updates.pay_frequency;
   // Update linked business ID in sales module
   if (typeof _linkedBusinessId !== 'undefined') {
     _linkedBusinessId = updates.linked_business_id || null;
