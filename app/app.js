@@ -1008,12 +1008,31 @@ async function loadTeamList() {
     .in('business_id', allBizIds)
     .order('created_at');
 
-  if (error || !data?.length) {
+  if (error) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0;">Failed to load team.</div>';
+    return;
+  }
+
+  // Deduplicate by email — owner appears in multiple businesses, show once (prefer head office)
+  const seen = new Map();
+  for (const u of (data || [])) {
+    if (!seen.has(u.email)) {
+      seen.set(u.email, u);
+    } else {
+      // Prefer head office entry over franchise entry
+      if (u.business_id === _ownerBusinessId) {
+        seen.set(u.email, u);
+      }
+    }
+  }
+  const deduped = Array.from(seen.values());
+
+  if (!deduped.length) {
     el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0;">No team members yet.</div>';
     return;
   }
 
-  el.innerHTML = data.map(u => `
+  el.innerHTML = deduped.map(u => `
     <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
       <div class="avatar" style="width:32px;height:32px;font-size:12px;flex-shrink:0;">
         ${(u.email?.[0] || '?').toUpperCase()}
