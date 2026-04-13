@@ -1,5 +1,5 @@
 // Tayla Workforce Service Worker
-const CACHE_NAME = 'tayla-workforce-v7';
+const CACHE_NAME = 'tayla-workforce-v8';
 
 // Core assets to cache on install
 const PRECACHE_ASSETS = [
