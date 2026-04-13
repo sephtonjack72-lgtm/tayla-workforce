@@ -59,11 +59,18 @@ header {
 @supports (padding-top: env(safe-area-inset-top)) {
   body {
     padding-top: env(safe-area-inset-top);
-    background-color: var(--accent); /* match header so safe area fill looks correct */
   }
-  /* Reset padding on main content area */
-  main {
-    background: var(--bg);
+  /* Fill the safe area gap with header colour on iOS only */
+  body::before {
+    content: '';
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: env(safe-area-inset-top);
+    background: var(--accent);
+    z-index: 200;
   }
 }
 
