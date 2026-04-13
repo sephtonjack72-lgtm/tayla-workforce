@@ -907,8 +907,17 @@
             To find your Business ID: open Tayla Business → Settings → scroll to the bottom —
             your Business ID is shown there.
           </div>
+          <div class="form-row" style="margin-bottom:12px;">
+            <label class="form-label">Your Workforce Business ID <span style="font-size:10px;color:var(--text3);font-weight:400;">Copy this into Tayla Business → Settings → Workforce Link</span></label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input type="text" id="biz-workforce-id-display" class="form-input"
+                readonly
+                style="font-family:monospace;font-size:12px;background:var(--surface2);color:var(--text2);cursor:default;">
+              <button class="btn btn-ghost btn-sm" style="flex-shrink:0;" onclick="copyWorkforceBusinessId()">Copy</button>
+            </div>
+          </div>
           <div class="form-row">
-            <label class="form-label">Tayla Business ID</label>
+            <label class="form-label">Tayla Business ID <span style="font-size:10px;color:var(--text3);font-weight:400;">Paste from Tayla Business → Settings → Your Business ID</span></label>
             <input type="text" id="biz-linked-business-input" class="form-input"
               placeholder="e.g. a1b2c3d4-e5f6-..."
               style="font-family:monospace;font-size:12px;">
