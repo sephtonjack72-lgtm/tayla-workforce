@@ -454,6 +454,9 @@ async function applyProfile(profile) {
   // Show billing banner if needed
   showBillingBanner();
 
+  // Show beta notice banner for all users every session
+  showBetaBanner();
+
   // Check for pending tier change notification (owner only)
   if (_userRole === 'owner' && _businessId === _ownerBusinessId) {
     checkTierNotification();
@@ -1889,6 +1892,19 @@ async function openBillingPortal() {
   } finally {
     if (btn) { btn.textContent = 'Manage Billing'; btn.disabled = false; }
   }
+}
+
+function showBetaBanner() {
+  // Show every session unless dismissed — sessionStorage resets on tab/window close
+  if (sessionStorage.getItem('beta_banner_dismissed')) return;
+  const banner = document.getElementById('beta-banner');
+  if (banner) banner.style.display = 'block';
+}
+
+function dismissBetaBanner() {
+  sessionStorage.setItem('beta_banner_dismissed', '1');
+  const banner = document.getElementById('beta-banner');
+  if (banner) banner.style.display = 'none';
 }
 
 function showBillingBanner() {
