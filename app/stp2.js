@@ -2,6 +2,26 @@
    Tayla Workforce — STP Phase 2 Generator
    stp2.js
 
+// ── Period date resolver
+// Uses push payslips picker if set, otherwise falls back to
+// currently viewed timesheet week, otherwise uses last 7 days
+function resolvePeriodDates(weekStart, weekEnd) {
+  const endInput = document.getElementById('push-period-end-date');
+  if (endInput?.value) {
+    const end   = endInput.value;
+    const start = typeof getPeriodStartFromEnd === 'function'
+      ? getPeriodStartFromEnd(end)
+      : (() => { const d = new Date(end); d.setDate(d.getDate() - 6); return d.toISOString().slice(0,10); })();
+    return { start, end };
+  }
+  if (weekStart && weekEnd) return { start: weekStart, end: weekEnd };
+  // Fallback: last full week ending yesterday
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  const end   = yesterday.toISOString().slice(0, 10);
+  const start = new Date(yesterday); start.setDate(start.getDate() - 6);
+  return { start: start.toISOString().slice(0, 10), end };
+}
+
    Generates ATO-compliant STP2 JSON payloads for
    submission via ATO Business Portal or tax agent.
 
@@ -185,6 +205,9 @@ function buildSTP2Payload(payslips, businessProfile, paymentDate) {
 
 // ── Generate and download STP2 file
 async function generateSTP2Report(weekStart, weekEnd) {
+  const _resolved = resolvePeriodDates(weekStart, weekEnd);
+  weekStart = _resolved.start;
+  weekEnd = _resolved.end;
   if (!_businessId || !_businessProfile) { toast('No business loaded'); return; }
 
   const btn = document.getElementById('stp2-export-btn');
@@ -362,6 +385,9 @@ function showSTP2Readiness() {
 // ══════════════════════════════════════════════════════
 
 async function exportXeroCSV(weekStart, weekEnd) {
+  const _resolved = resolvePeriodDates(weekStart, weekEnd);
+  weekStart = _resolved.start;
+  weekEnd = _resolved.end;
   const btn = document.getElementById('xero-export-btn');
   if (btn) { btn.textContent = 'Generating…'; btn.disabled = true; }
 
@@ -476,6 +502,9 @@ async function exportXeroCSV(weekStart, weekEnd) {
 // ══════════════════════════════════════════════════════
 
 async function exportMYOBCSV(weekStart, weekEnd) {
+  const _resolved = resolvePeriodDates(weekStart, weekEnd);
+  weekStart = _resolved.start;
+  weekEnd = _resolved.end;
   const btn = document.getElementById('myob-export-btn');
   if (btn) { btn.textContent = 'Generating…'; btn.disabled = true; }
 
@@ -581,6 +610,9 @@ function downloadCSV(content, filename) {
 // ══════════════════════════════════════════════════════
 
 async function exportABAFile(weekStart, weekEnd) {
+  const _resolved = resolvePeriodDates(weekStart, weekEnd);
+  weekStart = _resolved.start;
+  weekEnd = _resolved.end;
   const btn = document.getElementById('aba-export-btn');
   if (btn) { btn.textContent = 'Generating…'; btn.disabled = true; }
 
@@ -737,6 +769,9 @@ async function exportABAFile(weekStart, weekEnd) {
 // ══════════════════════════════════════════════════════
 
 async function exportSuperStream(weekStart, weekEnd) {
+  const _resolved = resolvePeriodDates(weekStart, weekEnd);
+  weekStart = _resolved.start;
+  weekEnd = _resolved.end;
   const btn = document.getElementById('superstream-export-btn');
   if (btn) { btn.textContent = 'Generating…'; btn.disabled = true; }
 
