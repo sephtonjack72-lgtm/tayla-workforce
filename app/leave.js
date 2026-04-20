@@ -387,30 +387,47 @@ async function approveLeaveRequest(reqId) {
     Object.keys(updates).length ? dbSaveLeaveBalance(req.employee_id, updates) : Promise.resolve(),
   ]);
 
-  // Write approval back to Personal app if this came from Personal
+  // Update local cache immediately
+  const local = leaveRequests.find(r => r.id === reqId);
+  if (local) { local.status = 'approved'; local.hours = hours || req.hours; }
+
+  // Fire writeback in background
   if (req.personal_leave_id) {
-    await writebackLeaveStatusToPersonal(req.personal_leave_id, 'approved');
+    writebackLeaveStatusToPersonal(req.personal_leave_id, 'approved');
   }
 
   toast('Leave request approved ✓');
-  await Promise.all([dbLoadLeaveBalances(), dbLoadLeaveRequests()]);
   renderLeavePage();
+
+  // Re-fetch in background
+  Promise.all([dbLoadLeaveBalances(), dbLoadLeaveRequests()]).then(() => renderLeavePage());
 }
 
 async function rejectLeaveRequest(reqId) {
   const req = leaveRequests.find(r => r.id === reqId);
   if (!req) return;
 
-  await _supabase.from('leave_requests').update({ status: 'rejected' }).eq('id', reqId);
+  const { error } = await _supabase
+    .from('leave_requests')
+    .update({ status: 'rejected' })
+    .eq('id', reqId);
 
-  // Write rejection back to Personal app if this came from Personal
+  if (error) { toast('Error: ' + error.message); return; }
+
+  // Update local cache immediately so UI reflects change without waiting for re-fetch
+  const local = leaveRequests.find(r => r.id === reqId);
+  if (local) local.status = 'rejected';
+
+  // Fire writeback in background — don't block UI on it
   if (req.personal_leave_id) {
-    await writebackLeaveStatusToPersonal(req.personal_leave_id, 'declined');
+    writebackLeaveStatusToPersonal(req.personal_leave_id, 'declined');
   }
 
   toast('Leave request rejected');
-  await dbLoadLeaveRequests();
   renderLeavePage();
+
+  // Re-fetch in background to stay in sync
+  dbLoadLeaveRequests().then(() => renderLeavePage());
 }
 
 // ── Write leave status back to Tayla Personal via Edge Function
