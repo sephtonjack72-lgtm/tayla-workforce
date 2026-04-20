@@ -1047,7 +1047,7 @@ async function generateNextProjection(closedDate) {
 // ══════════════════════════════════════════════════════
 
 // Square App credentials — set after developer account created
-const SQUARE_APP_ID      = ''; // Set after Square developer account setup
+const SQUARE_APP_ID      = 'sq0idp-f4IyMV1D5_TL5E0Tsrv8Aw';
 const SQUARE_REDIRECT    = 'https://workforce.usetayla.com.au/app/square-callback';
 const SQUARE_SCOPE       = 'ORDERS_READ PAYMENTS_READ MERCHANT_PROFILE_READ';
 const SQUARE_AUTH_URL    = 'https://connect.squareup.com/oauth2/authorize';
