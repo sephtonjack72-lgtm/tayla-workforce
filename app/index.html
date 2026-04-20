@@ -1272,5 +1272,17 @@
     });
   }
 </script>
+<!-- Close Day Modal -->
+<div class="modal-overlay" id="close-day-modal">
+  <div class="modal" style="max-width:460px;">
+    <h3>Close Day</h3>
+    <div id="close-day-content"></div>
+    <div class="flex-gap" style="justify-content:flex-end;margin-top:20px;">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('close-day-modal')">Cancel</button>
+      <button class="btn btn-primary" id="confirm-close-day-btn">Close Day</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
