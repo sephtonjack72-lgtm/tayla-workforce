@@ -36,53 +36,103 @@ async function dbDeleteTimesheet(id) {
 
 let _tsWeekStart = null;
 
+// Returns the number of days in the current pay period
+function getPeriodDays() {
+  if (_payFrequency === 'fortnightly') return 14;
+  if (_payFrequency === 'monthly')     return null; // handled separately
+  return 7; // weekly default
+}
+
+// Returns the period start date string for display/navigation
 function getTsWeekStart() {
   if (!_tsWeekStart) _tsWeekStart = getWeekStart(localDateStr(new Date()));
   return _tsWeekStart;
 }
 
+// Navigate forward/back by one pay period
 function tsWeekNav(dir) {
   const d = parseLocalDate(getTsWeekStart());
-  d.setDate(d.getDate() + dir * 7);
+  if (_payFrequency === 'monthly') {
+    d.setMonth(d.getMonth() + dir);
+  } else {
+    d.setDate(d.getDate() + dir * getPeriodDays());
+  }
   _tsWeekStart = localDateStr(d);
   renderTimesheets();
 }
 
-// Instant render from memory — called on tab switch
-function renderTimesheetsFromMemory() {
-  _tsWeekStart = getTsWeekStart();
-  const weekDates = getWeekDates(_tsWeekStart);
-  const weekEnd   = weekDates[6];
-
-  const label = document.getElementById('ts-week-label');
-  if (label) {
-    const start = parseLocalDate(_tsWeekStart);
-    const end   = parseLocalDate(weekEnd);
-    label.textContent = `${start.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} — ${end.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+// Returns array of date strings for the current pay period
+function getPeriodDates(periodStart) {
+  if (_payFrequency === 'fortnightly') {
+    return Array.from({ length: 14 }, (_, i) => {
+      const d = parseLocalDate(periodStart);
+      d.setDate(d.getDate() + i);
+      return localDateStr(d);
+    });
   }
-
-  renderTimesheetKPIs(weekDates);
-  renderTimesheetTable(weekDates);
+  if (_payFrequency === 'monthly') {
+    const start = parseLocalDate(periodStart);
+    const year  = start.getFullYear();
+    const month = start.getMonth();
+    const days  = new Date(year, month + 1, 0).getDate();
+    return Array.from({ length: days }, (_, i) => {
+      const d = new Date(year, month, i + 1);
+      return localDateStr(d);
+    });
+  }
+  // Weekly default
+  return getWeekDates(periodStart);
 }
 
-// Full render — fetches from Supabase if week not loaded, then renders
-function renderTimesheets() {
-  _tsWeekStart = getTsWeekStart();
-  const weekDates = getWeekDates(_tsWeekStart);
-  const weekEnd   = weekDates[6];
+// Returns period start/end/dates for the previous (or current) pay period
+function getPreviousPeriodRange() {
+  const periodStart = getTsWeekStart();
+  const dates       = getPeriodDates(periodStart);
+  return {
+    prevStart: periodStart,
+    prevEnd:   dates[dates.length - 1],
+    prevDates: dates,
+  };
+}
+
+// Formatted label for current period
+function getPeriodLabel(periodStart) {
+  const dates = getPeriodDates(periodStart);
+  const start = parseLocalDate(dates[0]);
+  const end   = parseLocalDate(dates[dates.length - 1]);
+  if (_payFrequency === 'monthly') {
+    return start.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
+  }
+  return `${start.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} — ${end.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+}
+
+// Instant render from memory — called on tab switch
+function renderTimesheetsFromMemory() {
+  _tsWeekStart    = getTsWeekStart();
+  const periodDates = getPeriodDates(_tsWeekStart);
+  const periodEnd   = periodDates[periodDates.length - 1];
 
   const label = document.getElementById('ts-week-label');
-  if (label) {
-    const start = parseLocalDate(_tsWeekStart);
-    const end   = parseLocalDate(weekEnd);
-    label.textContent = `${start.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} — ${end.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
-  }
+  if (label) label.textContent = getPeriodLabel(_tsWeekStart);
 
-  renderTimesheetKPIs(weekDates);
+  renderTimesheetKPIs(periodDates);
+  renderTimesheetTable(periodDates);
+}
 
-  ensureTimesheetsLoaded(_tsWeekStart, weekEnd).then(() => {
-    markTimesheetsLoaded(_tsWeekStart, weekEnd);
-    renderTimesheetTable(weekDates);
+// Full render — fetches from Supabase if period not loaded, then renders
+function renderTimesheets() {
+  _tsWeekStart      = getTsWeekStart();
+  const periodDates = getPeriodDates(_tsWeekStart);
+  const periodEnd   = periodDates[periodDates.length - 1];
+
+  const label = document.getElementById('ts-week-label');
+  if (label) label.textContent = getPeriodLabel(_tsWeekStart);
+
+  renderTimesheetKPIs(periodDates);
+
+  ensureTimesheetsLoaded(_tsWeekStart, periodEnd).then(() => {
+    markTimesheetsLoaded(_tsWeekStart, periodEnd);
+    renderTimesheetTable(periodDates);
   });
 }
 
@@ -309,12 +359,7 @@ async function approveAllPending() {
 // ══════════════════════════════════════════════════════
 
 function getPreviousWeekRange() {
-  const weekDates = getWeekDates(getTsWeekStart());
-  return {
-    prevStart: getTsWeekStart(),
-    prevEnd:   weekDates[6],
-    prevDates: weekDates,
-  };
+  return getPreviousPeriodRange();
 }
 
 async function openPushPayslipsModal() {
@@ -327,7 +372,7 @@ async function openPushPayslipsModal() {
   const modal = document.getElementById('push-payslips-modal');
   if (!modal) return;
 
-  const periodLabel = `${parseLocalDate(prevStart).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} — ${parseLocalDate(prevEnd).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  const periodLabel = getPeriodLabel(prevStart);
 
   // Build preview rows
   const rows = activeEmps.map(emp => {
@@ -425,9 +470,10 @@ async function executePushPayslips() {
       const grossPay     = +shiftBreakdown.reduce((s, r) => s + r.pay.grossPay, 0).toFixed(2);
       const laundryAllow = +shiftBreakdown.reduce((s, r) => s + r.pay.laundryAllowance, 0).toFixed(2);
       const totalGross   = +(grossPay + laundryAllow).toFixed(2);
-      const paygWithheld = calcPAYG(totalGross, emp.tax_free_threshold !== false, emp.residency_status || 'australian');
-      const medicare     = calcMedicare(totalGross, emp.residency_status || 'australian');
-      const hecsRepay    = emp.hecs_help ? calcHECSRepayment(totalGross) : 0;
+      const _periods     = getPeriodsPerYear(_payFrequency);
+      const paygWithheld = calcPAYG(totalGross, emp.tax_free_threshold !== false, emp.residency_status || 'australian', _periods);
+      const medicare     = calcMedicare(totalGross, emp.residency_status || 'australian', _periods);
+      const hecsRepay    = emp.hecs_help ? calcHECSRepayment(totalGross, _periods) : 0;
       const totalTax     = paygWithheld + medicare + hecsRepay;
       const superAmount  = calcSuper(grossPay);
       const netPay       = +(totalGross - totalTax).toFixed(2);
