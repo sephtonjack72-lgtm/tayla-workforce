@@ -49,14 +49,10 @@ function getTsWeekStart() {
   return _tsWeekStart;
 }
 
-// Navigate forward/back by one pay period
+// Navigate forward/back by one week — timesheet view is always weekly
 function tsWeekNav(dir) {
   const d = parseLocalDate(getTsWeekStart());
-  if (_payFrequency === 'monthly') {
-    d.setMonth(d.getMonth() + dir);
-  } else {
-    d.setDate(d.getDate() + dir * getPeriodDays());
-  }
+  d.setDate(d.getDate() + dir * 7);
   _tsWeekStart = localDateStr(d);
   renderTimesheets();
 }
@@ -109,30 +105,39 @@ function getPeriodLabel(periodStart) {
 // Instant render from memory — called on tab switch
 function renderTimesheetsFromMemory() {
   _tsWeekStart    = getTsWeekStart();
-  const periodDates = getPeriodDates(_tsWeekStart);
-  const periodEnd   = periodDates[periodDates.length - 1];
+  const weekDates = getWeekDates(_tsWeekStart);
+  const weekEnd   = weekDates[6];
 
   const label = document.getElementById('ts-week-label');
-  if (label) label.textContent = getPeriodLabel(_tsWeekStart);
+  if (label) {
+    const start = parseLocalDate(_tsWeekStart);
+    const end   = parseLocalDate(weekEnd);
+    label.textContent = `${start.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} — ${end.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  }
 
-  renderTimesheetKPIs(periodDates);
-  renderTimesheetTable(periodDates);
+  renderTimesheetKPIs(weekDates);
+  renderTimesheetTable(weekDates);
 }
 
-// Full render — fetches from Supabase if period not loaded, then renders
+// Full render — fetches from Supabase if week not loaded, then renders
+// Timesheet view is always weekly for ease of reading
 function renderTimesheets() {
-  _tsWeekStart      = getTsWeekStart();
-  const periodDates = getPeriodDates(_tsWeekStart);
-  const periodEnd   = periodDates[periodDates.length - 1];
+  _tsWeekStart    = getTsWeekStart();
+  const weekDates = getWeekDates(_tsWeekStart);
+  const weekEnd   = weekDates[6];
 
   const label = document.getElementById('ts-week-label');
-  if (label) label.textContent = getPeriodLabel(_tsWeekStart);
+  if (label) {
+    const start = parseLocalDate(_tsWeekStart);
+    const end   = parseLocalDate(weekEnd);
+    label.textContent = `${start.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} — ${end.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  }
 
-  renderTimesheetKPIs(periodDates);
+  renderTimesheetKPIs(weekDates);
 
-  ensureTimesheetsLoaded(_tsWeekStart, periodEnd).then(() => {
-    markTimesheetsLoaded(_tsWeekStart, periodEnd);
-    renderTimesheetTable(periodDates);
+  ensureTimesheetsLoaded(_tsWeekStart, weekEnd).then(() => {
+    markTimesheetsLoaded(_tsWeekStart, weekEnd);
+    renderTimesheetTable(weekDates);
   });
 }
 
@@ -359,21 +364,77 @@ async function approveAllPending() {
 //  PUSH PAYSLIPS — PREVIOUS WEEK (BULK)
 // ══════════════════════════════════════════════════════
 
-function getPreviousWeekRange() {
-  return getPreviousPeriodRange();
+// Calculate period start from end date and pay frequency
+function getPeriodStartFromEnd(endDateStr) {
+  const end = parseLocalDate(endDateStr);
+  if (_payFrequency === 'fortnightly') {
+    const start = new Date(end);
+    start.setDate(start.getDate() - 13); // 14 days inclusive
+    return localDateStr(start);
+  }
+  if (_payFrequency === 'monthly') {
+    const start = new Date(end.getFullYear(), end.getMonth(), 1);
+    return localDateStr(start);
+  }
+  // Weekly — 7 days inclusive
+  const start = new Date(end);
+  start.setDate(start.getDate() - 6);
+  return localDateStr(start);
+}
+
+// Generate all dates between start and end inclusive
+function getDateRange(startStr, endStr) {
+  const dates = [];
+  const d = parseLocalDate(startStr);
+  const end = parseLocalDate(endStr);
+  while (d <= end) {
+    dates.push(localDateStr(d));
+    d.setDate(d.getDate() + 1);
+  }
+  return dates;
+}
+
+function getPeriodFrequencyLabel() {
+  if (_payFrequency === 'fortnightly') return 'Fortnightly';
+  if (_payFrequency === 'monthly')     return 'Monthly';
+  return 'Weekly';
 }
 
 async function openPushPayslipsModal() {
-  const { prevStart, prevEnd, prevDates } = getPreviousWeekRange();
-
-  // Load timesheets for the previous week fresh
-  await dbLoadTimesheets(prevStart, prevEnd);
-
-  const activeEmps = employees.filter(e => e.active !== false);
   const modal = document.getElementById('push-payslips-modal');
   if (!modal) return;
 
-  const periodLabel = getPeriodLabel(prevStart);
+  // Default end date to yesterday (last full day)
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const defaultEnd = localDateStr(yesterday);
+
+  const endDateInput = document.getElementById('push-period-end-date');
+  if (endDateInput && !endDateInput.value) endDateInput.value = defaultEnd;
+
+  await refreshPushPayslipsPreview();
+  modal.classList.add('show');
+}
+
+async function refreshPushPayslipsPreview() {
+  const endDateInput = document.getElementById('push-period-end-date');
+  const prevEnd = endDateInput?.value || localDateStr(new Date());
+  if (!prevEnd) return;
+
+  const prevStart = getPeriodStartFromEnd(prevEnd);
+  const prevDates = getDateRange(prevStart, prevEnd);
+
+  // Load timesheets for this period
+  await dbLoadTimesheets(prevStart, prevEnd);
+
+  const activeEmps = employees.filter(e => e.active !== false);
+
+  // Period label
+  const startD = parseLocalDate(prevStart);
+  const endD   = parseLocalDate(prevEnd);
+  const periodLabel = _payFrequency === 'monthly'
+    ? startD.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })
+    : `${startD.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} — ${endD.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })} (${getPeriodFrequencyLabel()})`;
 
   // Build preview rows
   const rows = activeEmps.map(emp => {
@@ -397,9 +458,9 @@ async function openPushPayslipsModal() {
     const initials  = ((emp.first_name?.[0] || '') + (emp.last_name?.[0] || '')).toUpperCase();
 
     let statusBadge;
-    if (!hasTs)     statusBadge = '<span class="badge badge-grey">No approved timesheets</span>';
+    if (!hasTs)          statusBadge = '<span class="badge badge-grey">No approved timesheets</span>';
     else if (!connected) statusBadge = '<span class="badge badge-yellow">Not connected</span>';
-    else            statusBadge = '<span class="badge badge-green">Ready to push</span>';
+    else                 statusBadge = '<span class="badge badge-green">Ready to push</span>';
 
     return { emp, hours, gross, hasTs, connected, initials, statusBadge };
   });
@@ -421,15 +482,17 @@ async function openPushPayslipsModal() {
     </div>
   `).join('');
 
-  document.getElementById('push-payslips-send-btn').disabled  = readyCount === 0;
+  document.getElementById('push-payslips-send-btn').disabled   = readyCount === 0;
   document.getElementById('push-payslips-send-btn').textContent = `📲 Push ${readyCount} Payslip${readyCount !== 1 ? 's' : ''}`;
   document.getElementById('push-payslips-result').innerHTML = '';
-
-  modal.classList.add('show');
 }
 
 async function executePushPayslips() {
-  const { prevStart, prevEnd, prevDates } = getPreviousWeekRange();
+  const endDateInput = document.getElementById('push-period-end-date');
+  const prevEnd  = endDateInput?.value;
+  if (!prevEnd) { toast('Please select a pay period end date'); return; }
+  const prevStart = getPeriodStartFromEnd(prevEnd);
+  const prevDates = getDateRange(prevStart, prevEnd);
   const { data: { session } } = await _supabase.auth.getSession();
   const token = session?.access_token;
 
