@@ -155,6 +155,7 @@ function openEditEmployee(id) {
   document.getElementById('emp-gender').value           = e.gender               || '';
   document.getElementById('emp-termination-date').value = e.termination_date     || '';
   document.getElementById('emp-salary-sacrifice').value = e.salary_sacrifice     || '';
+  document.getElementById('emp-myob-card-id').value = e.myob_card_id || '';
   document.getElementById('emp-modal').classList.add('show');
 }
 
@@ -185,6 +186,7 @@ async function saveEmployee() {
     active:               document.getElementById('emp-active').value === 'true',
     tax_free_threshold:   document.getElementById('emp-tax-free').value === 'true',
     residency_status:     document.getElementById('emp-residency').value,
+    myob_card_id:         document.getElementById('emp-myob-card-id').value.trim() || null,
     // STP2 fields
     date_of_birth:        document.getElementById('emp-dob').value || null,
     gender:               document.getElementById('emp-gender').value || null,
