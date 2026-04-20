@@ -476,51 +476,32 @@ function renderSalesDayPanel(date) {
         </div>
       </div>
 
-      <!-- ── AUTO PROJECTION PLACEHOLDER ── -->
-      <div class="sales-entry-card sales-entry-card-placeholder">
+      <!-- ── AUTO PROJECTION ── -->
+      <div class="sales-entry-card" id="auto-proj-card-${date}">
         <div class="sales-entry-card-header">
           <div>
-            <div style="font-weight:700;font-size:14px;color:var(--text2);">Auto Projection</div>
-            <div style="font-size:11px;color:var(--text3);">AI-powered forecast from your POS data</div>
+            <div style="font-weight:700;font-size:14px;">Auto Projection</div>
+            <div style="font-size:11px;color:var(--text3);">4-week trend · same day of week</div>
           </div>
-          <span class="badge badge-grey">Coming Soon</span>
+          <div style="display:flex;gap:8px;align-items:center;">
+            ${buildAutoProjectionBadge(date)}
+            ${['owner','franchise'].includes(_userRole) ? `<button class="btn btn-ghost btn-sm" onclick="refreshAutoProjection('${date}')" title="Recalculate">↻</button>` : ''}
+          </div>
+        </div>
+        <div id="auto-proj-body-${date}" style="padding:16px;">
+          ${buildAutoProjectionBody(date)}
         </div>
 
-        <div style="padding:24px 20px;display:flex;flex-direction:column;align-items:center;gap:14px;">
-          <div style="font-size:36px;">📊</div>
-          <div style="text-align:center;">
-            <div style="font-weight:600;font-size:14px;color:var(--text2);margin-bottom:6px;">POS Integration Required</div>
-            <div style="font-size:12px;color:var(--text3);line-height:1.6;max-width:240px;">
-              Connect your POS system to enable automatic sales projections based on your historical trading data, seasonal trends, and day-of-week patterns.
-            </div>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:6px;width:100%;margin-top:4px;">
-            ${['Square','Lightspeed','Doshii','Others'].map(pos => `
-              <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg);border-radius:8px;font-size:12px;">
-                <span style="color:var(--text2);">${pos}</span>
-                <span style="font-size:10px;color:var(--text3);">Coming soon</span>
-              </div>
-            `).join('')}
-          </div>
+        <!-- POS Connection status -->
+        <div style="border-top:1px solid var(--border);padding:12px 16px;">
+          ${buildPOSConnectionWidget(date)}
         </div>
 
-        <!-- Hourly breakdown placeholder -->
-        <div style="border-top:1px solid var(--border);padding:16px 20px;">
-          <div style="font-weight:600;font-size:13px;margin-bottom:4px;">Hourly Sales Breakdown</div>
-          <div style="font-size:11px;color:var(--text3);margin-bottom:12px;">Shows projected sales by hour alongside SPCH · Requires POS integration</div>
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">
-            ${['9am','10am','11am','12pm','1pm','2pm','3pm','4pm'].map(h => `
-              <div style="background:var(--bg);border-radius:6px;padding:8px;text-align:center;">
-                <div style="font-size:10px;color:var(--text3);">${h}</div>
-                <div style="font-size:12px;color:var(--border);font-weight:600;margin:2px 0;">$—</div>
-                <div style="font-size:9px;color:var(--border);">SPCH —</div>
-              </div>
-            `).join('')}
-          </div>
-          <div style="margin-top:10px;font-size:10px;color:var(--text3);text-align:center;">
-            ⏳ Hourly projections coming soon — connect your POS to unlock
-          </div>
-        </div>
+        <!-- Close Day -->
+        ${['owner','franchise'].includes(_userRole) ? `
+        <div style="border-top:1px solid var(--border);padding:12px 16px;">
+          ${buildCloseDayWidget(date)}
+        </div>` : ''}
       </div>
 
     </div>
@@ -649,3 +630,587 @@ async function saveSalesField(date, field, value) {
   renderSalesKPIs(getWeekDates(_salesWeekStart));
   refreshRosterDaySpch(date);
 }
+
+// ══════════════════════════════════════════════════════
+//  AUTO PROJECTION ENGINE
+//  Pure maths — no AI
+//  Algorithm: average of week-on-week % changes for
+//  same day of week across last 4 weeks of actual data
+// ══════════════════════════════════════════════════════
+
+// In-memory projection cache keyed by date
+let _autoProjections = {};
+
+async function calculateAutoProjection(targetDate) {
+  if (!_businessId) return null;
+
+  const target = new Date(targetDate + 'T00:00:00');
+  const dow    = target.getDay(); // 0=Sun … 6=Sat
+
+  // Fetch up to 5 weeks of closed actual sales for same day of week
+  const lookback = new Date(target);
+  lookback.setDate(lookback.getDate() - 35);
+  const lookbackStr = localDateStr(lookback);
+
+  const { data } = await _supabase
+    .from('sales_data')
+    .select('date, actual')
+    .eq('business_id', _businessId)
+    .gte('date', lookbackStr)
+    .lt('date', targetDate)
+    .not('actual', 'is', null)
+    .order('date', { ascending: true });
+
+  // Filter to same day of week with positive actuals
+  const sameDow = (data || []).filter(r => {
+    const d = new Date(r.date + 'T00:00:00');
+    return d.getDay() === dow && r.actual > 0;
+  });
+
+  if (sameDow.length < 4) {
+    return {
+      projected:    null,
+      growth_rate:  null,
+      weeks_of_data: sameDow.length,
+      is_manual:    false,
+    };
+  }
+
+  // Use most recent 4 data points
+  const recent  = sameDow.slice(-4);
+
+  // Calculate week-on-week % changes (3 changes from 4 points)
+  const changes = [];
+  for (let i = 1; i < recent.length; i++) {
+    const prev = recent[i - 1].actual;
+    const curr = recent[i].actual;
+    if (prev > 0) changes.push((curr - prev) / prev);
+  }
+
+  const avgGrowth   = changes.reduce((s, c) => s + c, 0) / changes.length;
+  const lastActual  = recent[recent.length - 1].actual;
+  const projected   = Math.max(0, +(lastActual * (1 + avgGrowth)).toFixed(2));
+
+  return {
+    projected,
+    growth_rate:   +avgGrowth.toFixed(6),
+    weeks_of_data: recent.length,
+    is_manual:     false,
+    last_actual:   lastActual,
+    last_date:     recent[recent.length - 1].date,
+  };
+}
+
+async function loadAutoProjectionsForWeek(weekDates) {
+  for (const date of weekDates) {
+    if (_autoProjections[date]) continue; // already loaded
+    const proj = await calculateAutoProjection(date);
+    if (proj) _autoProjections[date] = proj;
+  }
+}
+
+async function refreshAutoProjection(date) {
+  delete _autoProjections[date];
+  const proj = await calculateAutoProjection(date);
+  if (proj) _autoProjections[date] = proj;
+
+  // Re-render just this card's body
+  const bodyEl = document.getElementById(`auto-proj-body-${date}`);
+  const badgeEl = document.querySelector(`#auto-proj-card-${date} .sales-entry-card-header > div:last-child`);
+  if (bodyEl) bodyEl.innerHTML = buildAutoProjectionBody(date);
+  toast('Projection recalculated ✓');
+}
+
+function buildAutoProjectionBadge(date) {
+  const proj = _autoProjections[date];
+  if (!proj) return '<span class="badge badge-grey">Loading…</span>';
+  if (proj.weeks_of_data < 4) {
+    return `<span class="badge badge-yellow" title="Need 4 weeks of actuals">${proj.weeks_of_data}/4 weeks data</span>`;
+  }
+  const pct = (proj.growth_rate * 100).toFixed(1);
+  const col = proj.growth_rate >= 0 ? 'badge-green' : 'badge-red';
+  return `<span class="badge ${col}">${proj.growth_rate >= 0 ? '+' : ''}${pct}% trend</span>`;
+}
+
+function buildAutoProjectionBody(date) {
+  const proj = _autoProjections[date];
+  const sd   = salesData[date] || {};
+
+  if (!proj) {
+    return `<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px 0;">
+      <div style="font-size:20px;margin-bottom:8px;">⏳</div>
+      Calculating from historical data…
+    </div>`;
+  }
+
+  if (proj.weeks_of_data < 4) {
+    return `
+      <div style="text-align:center;padding:12px 0;">
+        <div style="font-size:20px;margin-bottom:8px;">📊</div>
+        <div style="font-weight:600;font-size:13px;color:var(--text2);margin-bottom:6px;">Not enough history yet</div>
+        <div style="font-size:12px;color:var(--text3);line-height:1.6;">
+          Need <strong>4 weeks</strong> of actuals for the same day of week.<br>
+          You have <strong>${proj.weeks_of_data}</strong> so far — keep entering actuals each day.
+        </div>
+        <div style="margin-top:12px;font-size:11px;color:var(--text3);">
+          Until then, use Manual Projection above.
+        </div>
+      </div>`;
+  }
+
+  const crewHours  = getDayCrewHours(date);
+  const labourCost = getDayLabourCost(date);
+  const spch       = calcSpch(proj.projected, crewHours);
+  const spchCol    = spchColour(spch, sd.target_spch);
+  const labourPct  = proj.projected && labourCost ? ((labourCost / proj.projected) * 100).toFixed(1) : null;
+  const pct        = (proj.growth_rate * 100).toFixed(1);
+  const isOverride = proj.is_manual;
+
+  return `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+      <div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Projected</div>
+        <div style="font-size:20px;font-weight:700;color:var(--success);">${fmt(proj.projected)}</div>
+        ${isOverride ? '<div style="font-size:10px;color:var(--gold);margin-top:2px;">✎ Manual override</div>' : `<div style="font-size:10px;color:var(--text3);margin-top:2px;">${proj.growth_rate >= 0 ? '+' : ''}${pct}% vs last ${getDayName(date)}</div>`}
+      </div>
+      <div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">SPCH</div>
+        <div style="font-size:20px;font-weight:700;color:${spchCol};">${spch ? '$' + spch : '—'}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px;">Labour: ${labourPct ? labourPct + '%' : '—'}</div>
+      </div>
+    </div>
+
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">
+      Based on last 4 × ${getDayName(date)}s · Last actual: ${fmt(proj.last_actual)} (${fmtDate(proj.last_date)})
+    </div>
+
+    ${['owner','franchise'].includes(_userRole) ? `
+    <!-- Manual override -->
+    <div style="padding:10px 12px;background:var(--surface2);border-radius:8px;">
+      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Override Projection</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <div style="position:relative;flex:1;">
+          <span class="field-prefix">$</span>
+          <input type="number" id="auto-proj-override-${date}" class="sales-input"
+            placeholder="${proj.projected}"
+            value="${isOverride ? proj.projected : ''}"
+            min="0" step="10">
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="applyAutoProjectionOverride('${date}')">Apply</button>
+        ${isOverride ? `<button class="btn btn-ghost btn-sm" style="color:var(--text3);" onclick="clearAutoProjectionOverride('${date}')">Reset</button>` : ''}
+      </div>
+    </div>` : ''}
+  `;
+}
+
+function getDayName(date) {
+  return new Date(date + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'long' });
+}
+
+async function applyAutoProjectionOverride(date) {
+  const val = parseFloat(document.getElementById(`auto-proj-override-${date}`)?.value);
+  if (!val || val <= 0) { toast('Enter a valid amount'); return; }
+
+  _autoProjections[date] = {
+    ..._autoProjections[date],
+    projected:  val,
+    is_manual:  true,
+  };
+
+  // Also save to sales_data.projected so it feeds through to roster/dashboard
+  await saveSalesField(date, 'projected', val);
+
+  const bodyEl = document.getElementById(`auto-proj-body-${date}`);
+  if (bodyEl) bodyEl.innerHTML = buildAutoProjectionBody(date);
+  toast('Projection override applied ✓');
+}
+
+async function clearAutoProjectionOverride(date) {
+  delete _autoProjections[date];
+  const proj = await calculateAutoProjection(date);
+  if (proj) _autoProjections[date] = proj;
+
+  const bodyEl = document.getElementById(`auto-proj-body-${date}`);
+  if (bodyEl) bodyEl.innerHTML = buildAutoProjectionBody(date);
+  toast('Projection reset to calculated value ✓');
+}
+
+// ══════════════════════════════════════════════════════
+//  CLOSE DAY
+//  Gates on: all rostered employees have a timesheet entry
+//  Owner/franchise only
+// ══════════════════════════════════════════════════════
+
+// In-memory closed days cache
+let _closedDays = {}; // keyed by date, value = sales_days row
+
+async function loadClosedDaysForWeek(weekStart, weekEnd) {
+  if (!_businessId) return;
+  const { data } = await _supabase
+    .from('sales_days')
+    .select('*')
+    .eq('business_id', _businessId)
+    .gte('date', weekStart)
+    .lte('date', weekEnd);
+  _closedDays = {};
+  (data || []).forEach(r => { _closedDays[r.date] = r; });
+}
+
+function buildCloseDayWidget(date) {
+  const closed   = _closedDays[date];
+  const today    = localDateStr(new Date());
+  const isPast   = date <= today;
+  const sd       = salesData[date] || {};
+  const hasSales = (sd.actual || sd.projected) > 0;
+
+  if (!isPast && date !== today) {
+    return `<div style="font-size:11px;color:var(--text3);text-align:center;padding:4px 0;">Close Day available once date is reached</div>`;
+  }
+
+  if (closed?.status === 'closed') {
+    const closedAt = new Date(closed.closed_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--success);">✓ Day Closed</div>
+          <div style="font-size:10px;color:var(--text3);">Closed ${closedAt} · Labour ${closed.labour_percent ? closed.labour_percent + '%' : '—'}</div>
+        </div>
+        <span class="badge badge-green">Locked</span>
+      </div>`;
+  }
+
+  // Check for missing timesheets
+  const dayShifts    = (typeof shifts !== 'undefined' ? shifts : []).filter(s => s.date === date && s.status !== 'cancelled');
+  const missingCount = dayShifts.filter(s => {
+    return !(typeof timesheets !== 'undefined' ? timesheets : []).find(t => t.employee_id === s.employee_id && t.date === date);
+  }).length;
+
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--text2);">Close Day</div>
+        <div style="font-size:10px;color:var(--text3);">
+          ${missingCount > 0
+            ? `<span style="color:var(--warning);">⚠ ${missingCount} timesheet${missingCount !== 1 ? 's' : ''} missing</span>`
+            : '✓ All timesheets entered'}
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="openCloseDayModal('${date}')"
+        ${missingCount > 0 ? 'disabled style="opacity:.5;cursor:not-allowed;"' : ''}>
+        Close Day
+      </button>
+    </div>`;
+}
+
+async function openCloseDayModal(date) {
+  if (!['owner', 'franchise'].includes(_userRole)) {
+    toast('Only owners and franchise managers can close a day');
+    return;
+  }
+
+  const closed = _closedDays[date];
+  if (closed?.status === 'closed') { toast('This day is already closed'); return; }
+
+  // Check all rostered employees have timesheet entries
+  const dayShifts = (typeof shifts !== 'undefined' ? shifts : []).filter(s => s.date === date && s.status !== 'cancelled');
+  const missing   = [];
+  for (const s of dayShifts) {
+    const hasTs = (typeof timesheets !== 'undefined' ? timesheets : []).find(t => t.employee_id === s.employee_id && t.date === date);
+    if (!hasTs) {
+      const emp = (typeof employees !== 'undefined' ? employees : []).find(e => e.id === s.employee_id);
+      if (emp) missing.push(`${emp.first_name} ${emp.last_name}`);
+    }
+  }
+
+  // Calculate labour figures
+  const labourCost = getDayLabourCost(date);
+  const sd         = salesData[date] || {};
+  const totalSales = sd.actual || sd.projected || 0;
+  const labourPct  = totalSales > 0 ? +((labourCost / totalSales) * 100).toFixed(2) : null;
+  const fmtD       = new Date(date + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  // Build modal content
+  let modal = document.getElementById('close-day-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'close-day-modal';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:460px;">
+        <h3>Close Day</h3>
+        <div id="close-day-content"></div>
+        <div class="flex-gap" style="justify-content:flex-end;margin-top:20px;">
+          <button class="btn btn-ghost btn-sm" onclick="closeModal('close-day-modal')">Cancel</button>
+          <button class="btn btn-primary" id="confirm-close-day-btn">Close Day</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  document.getElementById('close-day-content').innerHTML = `
+    <div style="font-size:13px;color:var(--text2);margin-bottom:16px;">${fmtD}</div>
+
+    ${missing.length > 0 ? `
+    <div style="padding:12px 14px;background:rgba(229,62,62,.08);border:1px solid rgba(229,62,62,.2);border-radius:8px;font-size:12px;color:var(--danger);margin-bottom:16px;">
+      <div style="font-weight:700;margin-bottom:6px;">⚠ Cannot close — missing timesheet entries</div>
+      <ul style="margin:4px 0 0 16px;padding:0;">
+        ${missing.map(n => `<li>${n}</li>`).join('')}
+      </ul>
+    </div>` : ''}
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;">
+      <div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Sales</div>
+        <div style="font-size:18px;font-weight:700;color:var(--success);">${fmt(totalSales)}</div>
+        <div style="font-size:9px;color:var(--text3);margin-top:2px;">${sd.actual ? 'actual' : 'projected'}</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Labour</div>
+        <div style="font-size:18px;font-weight:700;">${fmt(labourCost)}</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Labour %</div>
+        <div style="font-size:18px;font-weight:700;color:${labourPct > 35 ? 'var(--danger)' : labourPct > 30 ? 'var(--gold)' : 'var(--success)'};">
+          ${labourPct !== null ? labourPct + '%' : '—'}
+        </div>
+      </div>
+    </div>
+
+    <div style="font-size:12px;color:var(--text3);padding:10px 12px;background:var(--surface2);border-radius:8px;">
+      Closing the day locks today's sales figures and calculates final labour %. This cannot be undone.
+    </div>
+  `;
+
+  const confirmBtn = document.getElementById('confirm-close-day-btn');
+  confirmBtn.disabled = missing.length > 0;
+  confirmBtn.style.opacity = missing.length > 0 ? '.5' : '';
+  confirmBtn.onclick = () => executeCloseDay(date, totalSales, labourCost, labourPct);
+
+  modal.classList.add('show');
+}
+
+async function executeCloseDay(date, totalSales, labourCost, labourPct) {
+  const btn = document.getElementById('confirm-close-day-btn');
+  if (btn) { btn.textContent = 'Closing…'; btn.disabled = true; }
+
+  try {
+    const { data: { session } } = await _supabase.auth.getSession();
+    const record = {
+      business_id:    _businessId,
+      date,
+      status:         'closed',
+      total_sales:    totalSales,
+      labour_cost:    labourCost,
+      labour_percent: labourPct,
+      pos_source:     _posConnection?.provider || 'manual',
+      closed_at:      new Date().toISOString(),
+      closed_by:      session?.user?.id || null,
+    };
+
+    const { error } = await _supabase
+      .from('sales_days')
+      .upsert(record, { onConflict: 'business_id,date' });
+
+    if (error) throw new Error(error.message);
+
+    _closedDays[date] = record;
+
+    closeModal('close-day-modal');
+    toast(`Day closed ✓ — Labour ${labourPct !== null ? labourPct + '%' : '—'}`);
+
+    // Re-render the panel to show locked state
+    renderSalesDayPanel(date);
+
+    // Trigger projections for upcoming same-weekday
+    generateNextProjection(date);
+
+  } catch (err) {
+    toast('Error: ' + err.message);
+    if (btn) { btn.textContent = 'Close Day'; btn.disabled = false; }
+  }
+}
+
+// After closing a day, auto-generate the next projection for same weekday
+async function generateNextProjection(closedDate) {
+  const dow = new Date(closedDate + 'T00:00:00').getDay();
+  const next = new Date(closedDate + 'T00:00:00');
+  next.setDate(next.getDate() + 7);
+  const nextStr = localDateStr(next);
+  delete _autoProjections[nextStr];
+  const proj = await calculateAutoProjection(nextStr);
+  if (proj) _autoProjections[nextStr] = proj;
+}
+
+// ══════════════════════════════════════════════════════
+//  SQUARE POS CONNECTION
+//  OAuth 2.0 flow — owner/franchise only
+// ══════════════════════════════════════════════════════
+
+// Square App credentials — set after developer account created
+const SQUARE_APP_ID      = ''; // Set after Square developer account setup
+const SQUARE_REDIRECT    = 'https://workforce.usetayla.com.au/app/square-callback';
+const SQUARE_SCOPE       = 'ORDERS_READ PAYMENTS_READ MERCHANT_PROFILE_READ';
+const SQUARE_AUTH_URL    = 'https://connect.squareup.com/oauth2/authorize';
+
+function buildPOSConnectionWidget(date) {
+  if (!['owner', 'franchise'].includes(_userRole)) {
+    return `<div style="font-size:11px;color:var(--text3);">POS connection managed by owner</div>`;
+  }
+
+  if (_posConnection) {
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:8px;height:8px;border-radius:50%;background:var(--success);"></div>
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text2);">${_posConnection.provider.charAt(0).toUpperCase() + _posConnection.provider.slice(1)} Connected</div>
+            <div style="font-size:10px;color:var(--text3);">Sales sync active</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-ghost btn-sm" onclick="syncSquareSales('${date}')">↻ Sync Now</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="disconnectPOS()">Disconnect</button>
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--text2);">Connect POS</div>
+        <div style="font-size:10px;color:var(--text3);">Auto-fill daily sales from your POS</div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-primary btn-sm" onclick="connectSquare()">⬛ Connect Square</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:10px;color:var(--text3);" title="Lightspeed & OrderMate coming soon">More POS…</button>
+      </div>
+    </div>`;
+}
+
+function connectSquare() {
+  if (!SQUARE_APP_ID) {
+    toast('Square App ID not yet configured — check back soon');
+    return;
+  }
+  const state = btoa(JSON.stringify({ businessId: _businessId, ts: Date.now() }));
+  const url   = `${SQUARE_AUTH_URL}?client_id=${SQUARE_APP_ID}&scope=${encodeURIComponent(SQUARE_SCOPE)}&state=${state}&redirect_uri=${encodeURIComponent(SQUARE_REDIRECT)}`;
+  window.location.href = url;
+}
+
+// Called on page load to handle Square OAuth callback
+async function handleSquareCallback() {
+  const params = new URLSearchParams(window.location.search);
+  const code   = params.get('code');
+  const state  = params.get('state');
+  if (!code || !state) return;
+
+  // Clean URL
+  window.history.replaceState({}, '', window.location.pathname);
+
+  toast('Connecting Square…');
+
+  try {
+    // Exchange code for token via Edge Function
+    const { data: { session } } = await _supabase.auth.getSession();
+    const res = await fetch(
+      'https://whedwekxzjfqwjuoarid.supabase.co/functions/v1/square-oauth',
+      {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ code, state }),
+      }
+    );
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || 'OAuth failed');
+
+    await dbLoadPOSConnection();
+    toast('Square connected ✓');
+    renderSales();
+
+  } catch (err) {
+    toast('Square connection failed: ' + err.message);
+  }
+}
+
+async function dbLoadPOSConnection() {
+  if (!_businessId) return;
+  const { data } = await _supabase
+    .from('pos_connections')
+    .select('*')
+    .eq('business_id', _businessId)
+    .eq('status', 'active')
+    .maybeSingle();
+  _posConnection = data || null;
+}
+
+async function disconnectPOS() {
+  if (!_posConnection) return;
+  if (!confirm('Disconnect your POS? Sales will need to be entered manually.')) return;
+  await _supabase.from('pos_connections').update({ status: 'disconnected' }).eq('id', _posConnection.id);
+  _posConnection = null;
+  toast('POS disconnected');
+  renderSales();
+}
+
+// Manually trigger a Square sales sync for a given date
+async function syncSquareSales(date) {
+  if (!_posConnection || _posConnection.provider !== 'square') {
+    toast('No Square connection found');
+    return;
+  }
+  toast('Syncing Square sales…');
+  try {
+    const { data: { session } } = await _supabase.auth.getSession();
+    const res = await fetch(
+      'https://whedwekxzjfqwjuoarid.supabase.co/functions/v1/square-sync-sales',
+      {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ date, business_id: _businessId }),
+      }
+    );
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || 'Sync failed');
+
+    // Reload sales data for this date
+    await dbLoadSalesRange(date, date);
+    renderSalesDayPanel(date);
+    toast(`Square sales synced ✓ — ${fmt(data.total_sales || 0)}`);
+
+  } catch (err) {
+    toast('Sync failed: ' + err.message);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  HOOK INTO EXISTING renderSales
+//  Load projections, POS connection, and closed days
+//  when the sales page renders
+// ══════════════════════════════════════════════════════
+
+const _originalRenderSales = renderSales;
+renderSales = function() {
+  _originalRenderSales.call(this);
+  // Load new data in background after existing render
+  const weekDates = getWeekDates(_salesWeekStart);
+  const weekEnd   = weekDates[6];
+  Promise.all([
+    dbLoadPOSConnection(),
+    loadClosedDaysForWeek(_salesWeekStart, weekEnd),
+    loadAutoProjectionsForWeek(weekDates),
+  ]).then(() => {
+    // Re-render day panel to show updated projection/close day widgets
+    renderSalesDayPanel(_activeSalesDay);
+  });
+
+  // Handle Square OAuth callback if present
+  if (window.location.search.includes('code=')) {
+    handleSquareCallback();
+  }
+};
