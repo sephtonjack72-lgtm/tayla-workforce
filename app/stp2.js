@@ -602,6 +602,150 @@ function downloadCSV(content, filename) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+// ══════════════════════════════════════════════════════
+//  MYOB TIMESHEET EXPORT
+//  Format: MYOB AccountRight Desktop timesheet import (.txt)
+//  File menu → Import/Export Assistant → Import → Timesheets
+//  Employees matched by Card ID (emp.myob_card_id or emp.id)
+// ══════════════════════════════════════════════════════
+
+async function exportMYOBTimesheets(weekStart, weekEnd) {
+  const _resolved = resolvePeriodDates(weekStart, weekEnd);
+  weekStart = _resolved.start;
+  weekEnd   = _resolved.end;
+
+  const btn = document.getElementById('myob-ts-export-btn');
+  if (btn) { btn.textContent = 'Generating…'; btn.disabled = true; }
+
+  try {
+    if (!_businessId) throw new Error('No business loaded');
+
+    // Load timesheets for the period
+    const periodDates = getDateRange(weekStart, weekEnd);
+    const periodTs = timesheets.filter(t =>
+      periodDates.includes(t.date) && t.status === 'approved'
+    );
+
+    if (!periodTs.length) {
+      toast('No approved timesheets found for this period');
+      return;
+    }
+
+    const activeEmps = employees.filter(e => e.active !== false);
+    const lines = [];
+
+    // MYOB AccountRight timesheet import format
+    // Tab-delimited, one row per employee per day per payroll category
+    // Header row
+    lines.push([
+      'Emp. Co./Last Name',
+      'Emp. First Name',
+      'Emp. Card ID',
+      'Date',
+      'Payroll Category',
+      'Hours',
+      'Job',
+      'Notes',
+    ].join('	'));
+
+    for (const ts of periodTs) {
+      const emp = activeEmps.find(e => e.id === ts.employee_id);
+      if (!emp || !ts.start_time || !ts.end_time) continue;
+
+      const cardId = emp.myob_card_id || emp.id.slice(0, 8).toUpperCase();
+      const pay    = calcShiftPay({
+        date:       ts.date,
+        start_time: ts.start_time,
+        end_time:   ts.end_time,
+        break_mins: ts.break_mins,
+      }, emp);
+
+      // Format date as DD/MM/YYYY for MYOB
+      const [y, m, d] = ts.date.split('-');
+      const dateFmt = `${d}/${m}/${y}`;
+
+      // Ordinary hours
+      const ordinaryHours = pay.type === 'overtime'
+        ? 0
+        : +(pay.workedHours || 0).toFixed(2);
+      const overtimeHours = pay.type === 'overtime'
+        ? +(pay.workedHours || 0).toFixed(2)
+        : 0;
+
+      // Determine categories from line items
+      const lineItems = pay.lineItems || [];
+      let hasOrdinary = false;
+      let hasOvertime = false;
+
+      // If no line items, fall back to worked hours as ordinary
+      if (!lineItems.length) {
+        lines.push([
+          `"${emp.last_name}"`,
+          `"${emp.first_name}"`,
+          cardId,
+          dateFmt,
+          '"Base Hourly"',
+          +(pay.workedHours || 0).toFixed(2),
+          '',
+          `"${ts.notes || ''}"`,
+        ].join('	'));
+      } else {
+        for (const item of lineItems) {
+          const category = ['overtime1','overtime2'].includes(item.penaltyKey)
+            ? 'Overtime'
+            : 'Base Hourly';
+          lines.push([
+            `"${emp.last_name}"`,
+            `"${emp.first_name}"`,
+            cardId,
+            dateFmt,
+            `"${category}"`,
+            +(item.hours || 0).toFixed(2),
+            '',
+            `"${ts.notes || ''}"`,
+          ].join('	'));
+        }
+      }
+    }
+
+    // MYOB expects tab-delimited .txt
+    const content = lines.join('
+');
+    const blob    = new Blob([content], { type: 'text/plain;charset=utf-8;' });
+    const url     = URL.createObjectURL(blob);
+    const a       = document.createElement('a');
+    a.href        = url;
+    a.download    = `MYOB_Timesheets_${_businessProfile?.biz_name?.replace(/\s+/g,'_')}_${weekStart}_${weekEnd}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    const empCount = [...new Set(periodTs.map(t => t.employee_id))].length;
+    toast(`MYOB timesheets exported — ${empCount} employee${empCount !== 1 ? 's' : ''}, ${periodTs.length} shift${periodTs.length !== 1 ? 's' : ''} ✓`);
+
+  } catch (err) {
+    toast('Error: ' + err.message);
+  } finally {
+    if (btn) { btn.textContent = '📋 Export Timesheets (MYOB)'; btn.disabled = false; }
+  }
+}
+
+// Helper — generate all dates between start and end inclusive
+// (also used by resolvePeriodDates, defined here as fallback if timesheets.js not loaded)
+function getDateRange(startStr, endStr) {
+  if (typeof getDateRange !== 'undefined' && getDateRange !== arguments.callee) return getDateRange(startStr, endStr);
+  const dates = [];
+  const d   = new Date(startStr);
+  const end = new Date(endStr);
+  while (d <= end) {
+    dates.push(d.toISOString().slice(0, 10));
+    d.setDate(d.getDate() + 1);
+  }
+  return dates;
+}
+
+
 
 // ══════════════════════════════════════════════════════
 //  ABA FILE EXPORT (Australian Banking Association)
