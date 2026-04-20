@@ -2201,9 +2201,8 @@ function openSTP2Modal() {
 
   summaryEl.innerHTML = `
     <div style="margin-bottom:16px;font-size:13px;color:var(--text2);line-height:1.6;">
-      STP Phase 2 reports your payroll data to the ATO each pay run.
-      Download the JSON file and submit via the
-      <strong>ATO Business Portal</strong> or give it to your tax agent.
+      Export timesheets, payroll journals, and bank files for your accounting software.
+      The <strong>STP2 JSON</strong> is for reference only until Tayla achieves DSP registration — do not lodge directly with the ATO yet.
     </div>
     <div style="padding:12px 14px;background:var(--surface2);border-radius:8px;font-size:12px;margin-bottom:16px;">
       <div style="font-weight:600;margin-bottom:6px;">Current pay period</div>
