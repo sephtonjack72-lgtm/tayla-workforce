@@ -652,7 +652,7 @@ async function exportMYOBTimesheets(weekStart, weekEnd) {
       const emp = activeEmps.find(e => e.id === ts.employee_id);
       if (!emp || !ts.start_time || !ts.end_time) continue;
 
-      const cardId = emp.myob_card_id || emp.id.slice(0, 8).toUpperCase();
+      const cardId = emp.myob_card_id || emp.id.slice(0, 8).toUpperCase(); // Set MYOB Card ID in employee record for accurate matching
       const pay    = calcShiftPay({
         date:       ts.date,
         start_time: ts.start_time,
