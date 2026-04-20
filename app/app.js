@@ -2179,8 +2179,24 @@ function openSTP2Modal() {
   const modal = document.getElementById('stp2-modal');
   if (!modal) return;
 
-  // Show readiness check by default
-  const issues = typeof checkSTP2Readiness === 'function' ? checkSTP2Readiness() : [];
+  // Resolve period dates — prefer push picker, fall back to timesheet week
+  const endInput    = document.getElementById('push-period-end-date');
+  let periodEnd     = endInput?.value;
+  let periodStart   = periodEnd && typeof getPeriodStartFromEnd === 'function'
+    ? getPeriodStartFromEnd(periodEnd)
+    : _tsWeekStart;
+  if (!periodEnd && _tsWeekStart && typeof getWeekDates === 'function') {
+    periodEnd = getWeekDates(_tsWeekStart)[6];
+  }
+  // Final fallback — last 7 days
+  if (!periodEnd) {
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+    periodEnd   = yesterday.toISOString().slice(0, 10);
+    const start = new Date(yesterday); start.setDate(start.getDate() - 6);
+    periodStart = start.toISOString().slice(0, 10);
+  }
+
+  const issues    = typeof checkSTP2Readiness === 'function' ? checkSTP2Readiness() : [];
   const summaryEl = document.getElementById('stp2-summary');
 
   summaryEl.innerHTML = `
@@ -2191,7 +2207,8 @@ function openSTP2Modal() {
     </div>
     <div style="padding:12px 14px;background:var(--surface2);border-radius:8px;font-size:12px;margin-bottom:16px;">
       <div style="font-weight:600;margin-bottom:6px;">Current pay period</div>
-      <div style="color:var(--text2);">${_tsWeekStart || 'Go to Timesheets tab first'} to ${typeof getWeekDates === 'function' && _tsWeekStart ? getWeekDates(_tsWeekStart)[6] : ''}</div>
+      <div style="color:var(--text2);">${periodStart || '—'} to ${periodEnd || '—'}</div>
+      ${!endInput?.value ? '<div style="font-size:11px;color:var(--text3);margin-top:4px;">Set the period end date in Push Payslips for accurate exports.</div>' : ''}
     </div>
     ${issues.length > 0 ? `
     <div style="padding:12px 14px;background:rgba(229,62,62,.08);border-radius:8px;border:1px solid rgba(229,62,62,.2);font-size:12px;color:var(--danger);margin-bottom:12px;">
@@ -2203,7 +2220,6 @@ function openSTP2Modal() {
   `;
 
   modal.classList.add('show');
-  // Load super payment history
   if (typeof loadSuperPaymentHistory === 'function') loadSuperPaymentHistory();
 }
 
