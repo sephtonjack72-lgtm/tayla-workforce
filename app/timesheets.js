@@ -303,7 +303,7 @@ async function updateTsEntry(employeeId, date, field, value) {
   }
 
   await dbSaveTimesheet(ts);
-  renderTimesheetKPIs(getWeekDates(_tsWeekStart));
+  renderTimesheetKPIs(getPeriodDates(_tsWeekStart));
 }
 
 async function approveTimesheet(id) {
@@ -343,15 +343,16 @@ async function createTimesheetFromShift(employeeId, date) {
 }
 
 async function approveAllPending() {
-  const weekDates = getWeekDates(_tsWeekStart);
-  const pending = timesheets.filter(t => weekDates.includes(t.date) && t.status === 'pending');
+  const periodDates = getPeriodDates(_tsWeekStart);
+  const pending = timesheets.filter(t => periodDates.includes(t.date) && t.status === 'pending');
+  if (!pending.length) { toast('No pending timesheets'); return; }
   for (const ts of pending) {
     ts.status = 'approved';
     ts.approved_at = new Date().toISOString();
     await dbSaveTimesheet(ts);
   }
   renderTimesheets();
-  toast(`✓ Approved ${pending.length} timesheets`);
+  toast(`✓ Approved ${pending.length} timesheet${pending.length !== 1 ? 's' : ''}`);
 }
 
 // ══════════════════════════════════════════════════════
