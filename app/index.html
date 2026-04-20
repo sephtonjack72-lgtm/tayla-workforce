@@ -308,9 +308,8 @@
           <button class="btn btn-primary btn-sm" id="ts-push-btn" onclick="openPushPayslipsModal()" style="white-space:nowrap;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Push Payslips
           </button>
-          <button class="btn btn-ghost btn-sm" id="stp2-export-btn" onclick="openSTP2Modal()" style="white-space:nowrap;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> STP2 Export
-          </button>
+          <button class="btn btn-ghost btn-sm" id="stp2-export-btn" onclick="openSTP2Modal()" style="white-space:nowrap;" title="Payroll exports — timesheets, journals, ABA">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Payroll Exports
           </button>
         </div>
       </div>
@@ -1091,17 +1090,34 @@
 <div class="modal-overlay" id="stp2-modal">
   <div class="modal" style="max-width:540px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
-      <h3 style="margin:0;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> STP Phase 2 Export</h3>
+      <h3 style="margin:0;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Payroll Exports</h3>
       <button class="btn btn-ghost btn-sm" onclick="document.getElementById('stp2-modal').classList.remove('show')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div id="stp2-summary"></div>
-    <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;">
-      <button class="btn btn-ghost btn-sm" onclick="showSTP2Readiness()">Check Employee Readiness</button>
-      <button class="btn btn-primary btn-sm" id="stp2-generate-btn" onclick="generateSTP2Report()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Export STP2</button>
-      <button class="btn btn-ghost btn-sm" id="xero-export-btn" onclick="exportXeroCSV()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Export for Xero</button>
-      <button class="btn btn-ghost btn-sm" id="myob-export-btn" onclick="exportMYOBCSV()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Export for MYOB</button>
-      <button class="btn btn-ghost btn-sm" id="aba-export-btn" onclick="exportABAFile()">🏦 Export ABA File</button>
-      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('stp2-modal').classList.remove('show');showSuperStreamModal(_tsWeekStart, getWeekDates(_tsWeekStart)[6])">⚡ Submit Super</button>
+    <!-- DSP disclaimer -->
+    <div style="padding:10px 12px;background:rgba(212,160,23,.08);border:1px solid rgba(212,160,23,.3);border-radius:8px;font-size:11px;color:var(--text2);margin-top:16px;line-height:1.6;">
+      ⚠ <strong>Beta — reference only.</strong> Tayla Workforce is pending DSP registration with the ATO. Do not lodge STP2 JSON directly with the ATO until registration is complete. Xero, MYOB, and ABA exports are for your accountant or payroll processing.
+    </div>
+
+    <!-- Timesheet exports -->
+    <div style="margin-top:16px;">
+      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Timesheet Exports</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" id="myob-ts-export-btn" onclick="exportMYOBTimesheets()">📋 Timesheets → MYOB</button>
+      </div>
+    </div>
+
+    <!-- Payroll exports -->
+    <div style="margin-top:14px;">
+      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Payroll Exports</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" onclick="showSTP2Readiness()">Check Readiness</button>
+        <button class="btn btn-primary btn-sm" id="stp2-generate-btn" onclick="generateSTP2Report()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> STP2 JSON (reference)</button>
+        <button class="btn btn-ghost btn-sm" id="xero-export-btn" onclick="exportXeroCSV()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Payroll Journal → Xero</button>
+        <button class="btn btn-ghost btn-sm" id="myob-export-btn" onclick="exportMYOBCSV()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Payroll Journal → MYOB</button>
+        <button class="btn btn-ghost btn-sm" id="aba-export-btn" onclick="exportABAFile()">🏦 ABA Bank File</button>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('stp2-modal').classList.remove('show');showSuperStreamModal(_tsWeekStart, getWeekDates(_tsWeekStart)[6])">⚡ Submit Super</button>
+      </div>
     </div>
     <div style="margin-top:24px;border-top:1px solid var(--border);padding-top:16px;">
       <div style="font-weight:700;font-size:13px;margin-bottom:12px;">Super Payment History</div>
