@@ -621,7 +621,7 @@ async function exportMYOBTimesheets(weekStart, weekEnd) {
     if (!_businessId) throw new Error('No business loaded');
 
     // Load timesheets for the period
-    const periodDates = getDateRange(weekStart, weekEnd);
+    const periodDates = (typeof getDateRange === 'function' ? getDateRange : _stp2GetDateRange)(weekStart, weekEnd);
     const periodTs = timesheets.filter(t =>
       periodDates.includes(t.date) && t.status === 'approved'
     );
@@ -646,7 +646,7 @@ async function exportMYOBTimesheets(weekStart, weekEnd) {
       'Hours',
       'Job',
       'Notes',
-    ].join('	'));
+    ].join('\t'));
 
     for (const ts of periodTs) {
       const emp = activeEmps.find(e => e.id === ts.employee_id);
@@ -688,7 +688,7 @@ async function exportMYOBTimesheets(weekStart, weekEnd) {
           +(pay.workedHours || 0).toFixed(2),
           '',
           `"${ts.notes || ''}"`,
-        ].join('	'));
+        ].join('\t'));
       } else {
         for (const item of lineItems) {
           const category = ['overtime1','overtime2'].includes(item.penaltyKey)
@@ -703,19 +703,18 @@ async function exportMYOBTimesheets(weekStart, weekEnd) {
             +(item.hours || 0).toFixed(2),
             '',
             `"${ts.notes || ''}"`,
-          ].join('	'));
+          ].join('\t'));
         }
       }
     }
 
     // MYOB expects tab-delimited .txt
-    const content = lines.join('
-');
+    const content = lines.join('\r\n');
     const blob    = new Blob([content], { type: 'text/plain;charset=utf-8;' });
     const url     = URL.createObjectURL(blob);
     const a       = document.createElement('a');
     a.href        = url;
-    a.download    = `MYOB_Timesheets_${_businessProfile?.biz_name?.replace(/\s+/g,'_')}_${weekStart}_${weekEnd}.txt`;
+    a.download    = `MYOB_Timesheets_${(_businessProfile?.biz_name || 'payroll').replace(/\s+/g, '_')}_${weekStart}_${weekEnd}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -733,8 +732,7 @@ async function exportMYOBTimesheets(weekStart, weekEnd) {
 
 // Helper — generate all dates between start and end inclusive
 // (also used by resolvePeriodDates, defined here as fallback if timesheets.js not loaded)
-function getDateRange(startStr, endStr) {
-  if (typeof getDateRange !== 'undefined' && getDateRange !== arguments.callee) return getDateRange(startStr, endStr);
+function _stp2GetDateRange(startStr, endStr) {
   const dates = [];
   const d   = new Date(startStr);
   const end = new Date(endStr);
