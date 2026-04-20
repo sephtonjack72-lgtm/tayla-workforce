@@ -47,8 +47,9 @@ async function openPayslipModal(employeeId, weekStart) {
   const grossPay       = +shiftBreakdown.reduce((s, r) => s + r.pay.grossPay, 0).toFixed(2);
   const laundryAllow   = +shiftBreakdown.reduce((s, r) => s + r.pay.laundryAllowance, 0).toFixed(2);
   const totalGross     = +(grossPay + laundryAllow).toFixed(2);
-  const paygWithheld   = calcPAYG(totalGross, emp.tax_free_threshold !== false, emp.residency_status || 'australian');
-  const medicare       = calcMedicare(totalGross, emp.residency_status || 'australian');
+  const _periods       = getPeriodsPerYear(_payFrequency);
+  const paygWithheld   = calcPAYG(totalGross, emp.tax_free_threshold !== false, emp.residency_status || 'australian', _periods);
+  const medicare       = calcMedicare(totalGross, emp.residency_status || 'australian', _periods);
   const totalTax       = paygWithheld + medicare;
   const superAmount    = calcSuper(grossPay);
   const netPay         = +(totalGross - totalTax).toFixed(2);
@@ -455,4 +456,305 @@ async function pushPayslipToTayla() {
       </div>`;
     if (btn) { btn.textContent = '📲 Send to Tayla'; btn.disabled = false; }
   }
+}
+
+// ══════════════════════════════════════════════════════
+//  MYOB EXPORT (AccountRight CSV format)
+//  Queries payslips from Supabase by date range
+//  Uses the push period end date picker if available,
+//  otherwise falls back to the currently viewed week
+// ══════════════════════════════════════════════════════
+
+async function exportMYOBCSV(weekStart, weekEnd) {
+  weekStart = weekStart || _tsWeekStart;
+  weekEnd   = weekEnd   || (weekStart ? getWeekDates(weekStart)[6] : localDateStr(new Date()));
+  if (!_businessId) { toast('No business loaded'); return; }
+
+  // Prefer the period dates from the push payslips picker if available
+  const endDateInput = document.getElementById('push-period-end-date');
+  let periodEnd   = endDateInput?.value || weekEnd;
+  let periodStart = endDateInput?.value
+    ? getPeriodStartFromEnd(endDateInput.value)
+    : weekStart;
+
+  // Fetch all payslips for this period from Supabase
+  const { data: payslips, error } = await _supabase
+    .from('payslips')
+    .select('*, employees!employee_id(first_name, last_name, email, employment_type)')
+    .eq('business_id', _businessId)
+    .gte('pay_period_start', periodStart)
+    .lte('pay_period_end', periodEnd);
+
+  if (error) { toast('Error loading payslips: ' + error.message); return; }
+  if (!payslips?.length) {
+    toast('No payslips found for this period — push payslips first');
+    return;
+  }
+
+  // MYOB AccountRight Payroll CSV format
+  // Reference: MYOB AccountRight Import/Export specifications
+  const headers = [
+    'Co./Last Name',
+    'First Name',
+    'Payment Date',
+    'Pay Period Start',
+    'Pay Period End',
+    'Gross Wages',
+    'Tax Withheld',
+    'Medicare Levy',
+    'Super Amount',
+    'Net Pay',
+    'Allowances',
+    'Hours Worked',
+    'YTD Gross',
+    'YTD Tax',
+    'YTD Super',
+    'Employment Type',
+    'Pay Frequency',
+  ];
+
+  const rows = payslips.map(p => {
+    const emp = p.employees || {};
+    return [
+      emp.last_name  || '',
+      emp.first_name || '',
+      p.payment_date || p.pay_period_end || '',
+      p.pay_period_start || '',
+      p.pay_period_end   || '',
+      (p.gross_pay        || 0).toFixed(2),
+      (p.tax_withheld     || 0).toFixed(2),
+      (p.medicare_levy    || 0).toFixed(2),
+      (p.super_amount     || 0).toFixed(2),
+      (p.net_pay          || 0).toFixed(2),
+      (p.allowances       || 0).toFixed(2),
+      (p.hours_worked     || 0).toFixed(2),
+      (p.ytd_gross        || 0).toFixed(2),
+      (p.ytd_tax          || 0).toFixed(2),
+      (p.ytd_super        || 0).toFixed(2),
+      ({ permanent: 'Full-Time', parttime: 'Part-Time', casual: 'Casual' }[emp.employment_type] || 'Casual'),
+      ({ weekly: 'Weekly', fortnightly: 'Fortnightly', monthly: 'Monthly' }[_payFrequency] || 'Weekly'),
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
+  });
+
+  const csv     = [headers.map(h => `"${h}"`).join(','), ...rows].join('\r\n');
+  const blob    = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url     = URL.createObjectURL(blob);
+  const a       = document.createElement('a');
+  const bizName = (_businessProfile?.biz_name || 'payroll').replace(/[^a-z0-9]/gi, '-').toLowerCase();
+  a.href        = url;
+  a.download    = `myob-payroll-${bizName}-${periodEnd}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  toast(`MYOB export downloaded — ${payslips.length} payslip${payslips.length !== 1 ? 's' : ''} ✓`);
+}
+
+// ══════════════════════════════════════════════════════
+//  XERO EXPORT (Payroll CSV format)
+//  Compatible with Xero Payroll import
+// ══════════════════════════════════════════════════════
+
+async function exportXeroCSV(weekStart, weekEnd) {
+  weekStart = weekStart || _tsWeekStart;
+  weekEnd   = weekEnd   || (weekStart ? getWeekDates(weekStart)[6] : localDateStr(new Date()));
+
+  if (!_businessId) { toast('No business loaded'); return; }
+
+  const endDateInput  = document.getElementById('push-period-end-date');
+  const periodEnd     = endDateInput?.value || weekEnd;
+  const periodStart   = endDateInput?.value ? getPeriodStartFromEnd(endDateInput.value) : weekStart;
+
+  const { data: payslips, error } = await _supabase
+    .from('payslips')
+    .select('*, employees!employee_id(first_name, last_name, email, employment_type)')
+    .eq('business_id', _businessId)
+    .gte('pay_period_start', periodStart)
+    .lte('pay_period_end', periodEnd);
+
+  if (error) { toast('Error loading payslips: ' + error.message); return; }
+  if (!payslips?.length) {
+    toast('No payslips found for this period — push payslips first');
+    return;
+  }
+
+  // Xero Payroll CSV format
+  const headers = [
+    'Employee First Name',
+    'Employee Last Name',
+    'Employee Email',
+    'Payment Date',
+    'Start Date',
+    'End Date',
+    'Earnings Type',
+    'Hours Worked',
+    'Gross Earnings',
+    'PAYG Withholding',
+    'Net Pay',
+    'Superannuation',
+    'Allowances',
+    'Employment Type',
+  ];
+
+  const rows = payslips.map(p => {
+    const emp = p.employees || {};
+    return [
+      emp.first_name || '',
+      emp.last_name  || '',
+      emp.email      || '',
+      p.payment_date || p.pay_period_end   || '',
+      p.pay_period_start || '',
+      p.pay_period_end   || '',
+      'Ordinary Hours',
+      (p.hours_worked  || 0).toFixed(2),
+      (p.gross_pay     || 0).toFixed(2),
+      (p.tax_withheld  || 0).toFixed(2),
+      (p.net_pay       || 0).toFixed(2),
+      (p.super_amount  || 0).toFixed(2),
+      (p.allowances    || 0).toFixed(2),
+      ({ permanent: 'Permanent', parttime: 'Part Time', casual: 'Casual' }[emp.employment_type] || 'Casual'),
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
+  });
+
+  const csv     = [headers.map(h => `"${h}"`).join(','), ...rows].join('\r\n');
+  const blob    = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url     = URL.createObjectURL(blob);
+  const a       = document.createElement('a');
+  const bizName = (_businessProfile?.biz_name || 'payroll').replace(/[^a-z0-9]/gi, '-').toLowerCase();
+  a.href        = url;
+  a.download    = `xero-payroll-${bizName}-${periodEnd}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  toast(`Xero export downloaded — ${payslips.length} payslip${payslips.length !== 1 ? 's' : ''} ✓`);
+}
+
+// ══════════════════════════════════════════════════════
+//  ABA FILE EXPORT (Australian Banking Association)
+//  Direct credit file for bank payroll processing
+// ══════════════════════════════════════════════════════
+
+async function exportABAFile(weekStart, weekEnd) {
+  weekStart = weekStart || _tsWeekStart;
+  weekEnd   = weekEnd   || (weekStart ? getWeekDates(weekStart)[6] : localDateStr(new Date()));
+
+  if (!_businessId) { toast('No business loaded'); return; }
+
+  const endDateInput  = document.getElementById('push-period-end-date');
+  const periodEnd     = endDateInput?.value || weekEnd;
+  const periodStart   = endDateInput?.value ? getPeriodStartFromEnd(endDateInput.value) : weekStart;
+
+  // Check bank details exist on business profile
+  const bsb     = _businessProfile?.bank_bsb?.replace(/[^0-9]/g, '');
+  const account = _businessProfile?.bank_account?.replace(/[^0-9]/g, '');
+  const bizName = (_businessProfile?.biz_name || 'PAYROLL').substring(0, 26).toUpperCase();
+
+  if (!bsb || !account) {
+    toast('Add your BSB and account number in Business Settings first');
+    return;
+  }
+
+  const { data: payslips, error } = await _supabase
+    .from('payslips')
+    .select('*, employees!employee_id(first_name, last_name, bank_bsb, bank_account, bank_account_name)')
+    .eq('business_id', _businessId)
+    .gte('pay_period_start', periodStart)
+    .lte('pay_period_end', periodEnd);
+
+  if (error) { toast('Error loading payslips: ' + error.message); return; }
+  if (!payslips?.length) {
+    toast('No payslips found for this period — push payslips first');
+    return;
+  }
+
+  // Filter to employees with bank details
+  const payable = payslips.filter(p => {
+    const emp = p.employees || {};
+    return emp.bank_bsb && emp.bank_account && p.net_pay > 0;
+  });
+
+  if (!payable.length) {
+    toast('No employees have bank details set — add BSB and account in employee records');
+    return;
+  }
+
+  // ABA file format (DE format)
+  const totalNetPay = payable.reduce((s, p) => s + (p.net_pay || 0), 0);
+  const payDate     = periodEnd.replace(/-/g, '').slice(2); // DDMMYY
+  const d           = new Date(periodEnd);
+  const dateStr     = `${String(d.getDate()).padStart(2,'0')}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getFullYear()).slice(2)}`;
+
+  const lines = [];
+
+  // Descriptive record (header)
+  lines.push(
+    '0' +                                           // Record type
+    '                 ' +                           // blank (17)
+    '01' +                                          // reel sequence
+    'CBA       ' +                                  // bank (10) — placeholder
+    '      ' +                                      // blank (6)
+    bizName.padEnd(26, ' ') +                       // user name (26)
+    '000000' +                                      // APCA user ID (6) — placeholder
+    'PAYROLL'.padEnd(12, ' ') +                     // description (12)
+    dateStr +                                       // date (6)
+    ' '.repeat(40)                                  // blank (40)
+  );
+
+  // Detail records
+  payable.forEach(p => {
+    const emp        = p.employees || {};
+    const empBSB     = (emp.bank_bsb || '').replace(/[^0-9]/g, '').padStart(6, '0').slice(0, 6);
+    const empAcct    = (emp.bank_account || '').replace(/[^0-9]/g, '').padEnd(9, ' ').slice(0, 9);
+    const indicator  = ' ';
+    const txCode     = '53'; // Credit
+    const amount     = Math.round((p.net_pay || 0) * 100).toString().padStart(10, '0');
+    const acctName   = (emp.bank_account_name || `${emp.first_name} ${emp.last_name}`).substring(0, 32).padEnd(32, ' ');
+    const lodgeName  = bizName.substring(0, 16).padEnd(16, ' ');
+    const remitter   = bizName.substring(0, 16).padEnd(16, ' ');
+    const withheld   = '00000000'; // withholding tax — 0 for direct credit
+    const srcBSB     = bsb.padStart(6, '0').slice(0, 6);
+    const srcAcct    = account.padEnd(9, ' ').slice(0, 9);
+    const traceCode  = '53';
+
+    lines.push(
+      '1' +            // record type
+      empBSB + '-' +   // BSB (7)
+      empAcct +        // account (9)
+      indicator +      // indicator (1)
+      txCode +         // transaction code (2)
+      amount +         // amount in cents (10)
+      acctName +       // account name (32)
+      lodgeName +      // lodgement ref (18)
+      srcBSB + '-' +   // trace BSB (7)
+      srcAcct +        // trace account (9)
+      remitter +       // remitter name (16)
+      withheld         // withholding (8)
+    );
+  });
+
+  // File total record
+  const credit = Math.round(totalNetPay * 100).toString().padStart(10, '0');
+  const debit  = '0000000000';
+  const net    = Math.round(totalNetPay * 100).toString().padStart(10, '0');
+  lines.push(
+    '7' +                     // record type
+    '999-999' +               // BSB filler
+    '   ' +                   // blank (3)
+    debit +                   // total debit (10)
+    credit +                  // total credit (10)
+    net +                     // net total (10)
+    ' '.repeat(24) +          // blank (24)
+    String(payable.length).padStart(6, '0') + // record count (6)
+    ' '.repeat(40)            // blank (40)
+  );
+
+  const blob    = new Blob([lines.join('\r\n')], { type: 'text/plain;charset=utf-8;' });
+  const url     = URL.createObjectURL(blob);
+  const a       = document.createElement('a');
+  const fn      = (_businessProfile?.biz_name || 'payroll').replace(/[^a-z0-9]/gi, '-').toLowerCase();
+  a.href        = url;
+  a.download    = `aba-payroll-${fn}-${periodEnd}.aba`;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  toast(`ABA file downloaded — ${payable.length} payment${payable.length !== 1 ? 's' : ''}, total ${fmt(totalNetPay)} ✓`);
 }
