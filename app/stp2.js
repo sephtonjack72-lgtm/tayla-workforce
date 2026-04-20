@@ -2,6 +2,13 @@
    Tayla Workforce — STP Phase 2 Generator
    stp2.js
 
+   Generates ATO-compliant STP2 JSON payloads for
+   submission via ATO Business Portal or tax agent.
+
+   Reference: ATO STP Phase 2 Employer Reporting Guidelines
+   https://www.ato.gov.au/businesses-and-organisations/hiring-and-paying-your-workers/single-touch-payroll
+══════════════════════════════════════════════════════ */
+
 // ── Period date resolver
 // Uses push payslips picker if set, otherwise falls back to
 // currently viewed timesheet week, otherwise uses last 7 days
@@ -21,13 +28,6 @@ function resolvePeriodDates(weekStart, weekEnd) {
   const start = new Date(yesterday); start.setDate(start.getDate() - 6);
   return { start: start.toISOString().slice(0, 10), end };
 }
-
-   Generates ATO-compliant STP2 JSON payloads for
-   submission via ATO Business Portal or tax agent.
-
-   Reference: ATO STP Phase 2 Employer Reporting Guidelines
-   https://www.ato.gov.au/businesses-and-organisations/hiring-and-paying-your-workers/single-touch-payroll
-══════════════════════════════════════════════════════ */
 
 // ── Income type codes (ATO STP2)
 const STP2_INCOME_TYPES = {
