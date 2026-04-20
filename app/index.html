@@ -782,6 +782,17 @@
   <div class="modal" style="max-width:560px;">
     <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Push Payslips to Tayla</h3>
 
+    <!-- Pay period end date picker -->
+    <div style="margin-bottom:16px;">
+      <label style="font-size:12px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px;">Pay Period End Date</label>
+      <input type="date" id="push-period-end-date" class="form-input"
+        style="max-width:200px;"
+        onchange="refreshPushPayslipsPreview()">
+      <div style="font-size:11px;color:var(--text3);margin-top:4px;">
+        Enter the last day of this pay period — start date calculated automatically based on your pay frequency.
+      </div>
+    </div>
+
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--surface2);border-radius:10px;margin-bottom:20px;">
       <div>
         <div style="font-size:12px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">Pay Period</div>
@@ -794,7 +805,7 @@
     </div>
 
     <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">
-      Approved timesheets from the <strong>currently viewed week</strong> will be used to calculate and push payslips directly into each employee's Tayla app. Payslips are stored permanently in the employee's account.
+      Approved timesheets within the pay period will be aggregated and pushed as a single payslip per employee directly into their Tayla app.
     </div>
 
     <!-- Employee list -->
