@@ -352,7 +352,8 @@ async function approveLeaveRequest(reqId) {
   const req = leaveRequests.find(r => r.id === reqId);
   if (!req) return;
 
-  // Calculate hours from dates if not set (Personal app doesn't set hours)
+  // Use hours from request — employee enters these directly in Personal app
+  // Fall back to date calculation only if hours truly missing (legacy/manager-created requests)
   let hours = req.hours || 0;
   if (!hours && req.start_date && req.end_date) {
     const start    = new Date(req.start_date);
@@ -360,7 +361,12 @@ async function approveLeaveRequest(reqId) {
     const days     = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
     const emp      = employees.find(e => e.id === req.employee_id);
     const dailyHrs = emp?.ordinary_hours ? emp.ordinary_hours / 5 : 7.6;
-    hours          = +(days * dailyHrs).toFixed(2);
+    // Only count Mon-Fri
+    let workDays = 0;
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      if (d.getDay() !== 0 && d.getDay() !== 6) workDays++;
+    }
+    hours = +(workDays * dailyHrs).toFixed(2);
   }
 
   // Deduct from balance
