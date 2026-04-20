@@ -240,8 +240,11 @@ function renderLeavePage() {
 
     <!-- Leave requests -->
     <div class="card">
-      <div class="card-header">
+      <div class="card-header flex-between">
         <span class="card-title">Leave Requests</span>
+        <span style="font-size:11px;color:var(--text3);">
+          ${leaveRequests.filter(r => r.status === 'pending').length} pending
+        </span>
       </div>
       <div class="card-body" style="padding:0;">
         ${!leaveRequests.length ? '<div style="padding:32px;text-align:center;color:var(--text3);">No leave requests yet.</div>' : `
@@ -253,6 +256,7 @@ function renderLeavePage() {
               <th>From</th>
               <th>To</th>
               <th style="text-align:right;">Hours</th>
+              <th>Notes</th>
               <th>Status</th>
               <th></th>
             </tr>
@@ -260,18 +264,28 @@ function renderLeavePage() {
           <tbody>
             ${leaveRequests.map(req => {
               const emp = employees.find(e => e.id === req.employee_id);
+              const fromPersonal = req.source === 'personal_app';
               const statusBadge = {
                 pending:  '<span class="badge badge-yellow">Pending</span>',
                 approved: '<span class="badge badge-green">Approved</span>',
                 rejected: '<span class="badge badge-red">Rejected</span>',
               }[req.status] || '';
+              const sourceBadge = fromPersonal
+                ? '<span class="badge badge-blue" style="font-size:10px;margin-left:4px;" title="Submitted via Tayla Personal app">via app</span>'
+                : '';
               return `
                 <tr>
-                  <td>${emp ? `${emp.first_name} ${emp.last_name}` : '—'}</td>
+                  <td>
+                    <div style="font-weight:600;">${emp ? `${emp.first_name} ${emp.last_name}` : '—'}</div>
+                    ${sourceBadge}
+                  </td>
                   <td>${LEAVE_TYPES[req.leave_type]?.label || req.leave_type || '—'}</td>
                   <td>${req.start_date ? fmtDate(req.start_date) : '—'}</td>
                   <td>${req.end_date   ? fmtDate(req.end_date)   : '—'}</td>
                   <td style="text-align:right;" class="mono">${req.hours || '—'}h</td>
+                  <td style="font-size:12px;color:var(--text3);max-width:160px;">
+                    ${req.notes ? `<span title="${req.notes}">${req.notes.length > 40 ? req.notes.slice(0,40) + '…' : req.notes}</span>` : '—'}
+                  </td>
                   <td>${statusBadge}</td>
                   <td>
                     ${req.status === 'pending' ? `
@@ -338,21 +352,39 @@ async function approveLeaveRequest(reqId) {
   const req = leaveRequests.find(r => r.id === reqId);
   if (!req) return;
 
+  // Calculate hours from dates if not set (Personal app doesn't set hours)
+  let hours = req.hours || 0;
+  if (!hours && req.start_date && req.end_date) {
+    const start    = new Date(req.start_date);
+    const end      = new Date(req.end_date);
+    const days     = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
+    const emp      = employees.find(e => e.id === req.employee_id);
+    const dailyHrs = emp?.ordinary_hours ? emp.ordinary_hours / 5 : 7.6;
+    hours          = +(days * dailyHrs).toFixed(2);
+  }
+
   // Deduct from balance
-  const bal = leaveBalances[req.employee_id] || {};
+  const bal     = leaveBalances[req.employee_id] || {};
   const updates = {};
   if (req.leave_type === 'annual') {
-    updates.annual_leave_hours   = Math.max(0, (bal.annual_leave_hours   || 0) - (req.hours || 0));
+    updates.annual_leave_hours   = Math.max(0, (bal.annual_leave_hours   || 0) - hours);
   } else if (req.leave_type === 'sick') {
-    updates.sick_leave_hours     = Math.max(0, (bal.sick_leave_hours     || 0) - (req.hours || 0));
+    updates.sick_leave_hours     = Math.max(0, (bal.sick_leave_hours     || 0) - hours);
   } else if (req.leave_type === 'personal') {
-    updates.personal_leave_hours = Math.max(0, (bal.personal_leave_hours || 0) - (req.hours || 0));
+    updates.personal_leave_hours = Math.max(0, (bal.personal_leave_hours || 0) - hours);
   }
 
   await Promise.all([
-    _supabase.from('leave_requests').update({ status: 'approved' }).eq('id', reqId),
+    _supabase.from('leave_requests')
+      .update({ status: 'approved', hours: hours || req.hours })
+      .eq('id', reqId),
     Object.keys(updates).length ? dbSaveLeaveBalance(req.employee_id, updates) : Promise.resolve(),
   ]);
+
+  // Write approval back to Personal app if this came from Personal
+  if (req.personal_leave_id) {
+    await writebackLeaveStatusToPersonal(req.personal_leave_id, 'approved');
+  }
 
   toast('Leave request approved ✓');
   await Promise.all([dbLoadLeaveBalances(), dbLoadLeaveRequests()]);
@@ -360,10 +392,40 @@ async function approveLeaveRequest(reqId) {
 }
 
 async function rejectLeaveRequest(reqId) {
+  const req = leaveRequests.find(r => r.id === reqId);
+  if (!req) return;
+
   await _supabase.from('leave_requests').update({ status: 'rejected' }).eq('id', reqId);
+
+  // Write rejection back to Personal app if this came from Personal
+  if (req.personal_leave_id) {
+    await writebackLeaveStatusToPersonal(req.personal_leave_id, 'declined');
+  }
+
   toast('Leave request rejected');
   await dbLoadLeaveRequests();
   renderLeavePage();
+}
+
+// ── Write leave status back to Tayla Personal via Edge Function
+async function writebackLeaveStatusToPersonal(personalLeaveId, status) {
+  try {
+    await fetch(
+      'https://whedwekxzjfqwjuoarid.supabase.co/functions/v1/sync-leave-request',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action:           'writeback',
+          personal_leave_id: personalLeaveId,
+          status,
+        }),
+      }
+    );
+  } catch (e) {
+    console.warn('Leave status writeback to Personal failed:', e);
+    // Non-critical — employee will see status update on next sync
+  }
 }
 
 // ══════════════════════════════════════════════════════
