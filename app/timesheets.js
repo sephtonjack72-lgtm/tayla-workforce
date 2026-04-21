@@ -302,9 +302,13 @@ async function updateTsEntry(employeeId, date, field, value) {
 
   // Auto-calculate break
   if (ts.start_time && ts.end_time && !ts.break_mins) {
-    const startM = parseInt(ts.start_time.split(':')[0]) * 60 + parseInt(ts.start_time.split(':')[1]);
-    const endM   = parseInt(ts.end_time.split(':')[0])   * 60 + parseInt(ts.end_time.split(':')[1]);
-    ts.break_mins = calcBreakMins((endM - startM) / 60) || null;
+    const startM  = parseInt(ts.start_time.split(':')[0]) * 60 + parseInt(ts.start_time.split(':')[1]);
+    const endM    = parseInt(ts.end_time.split(':')[0])   * 60 + parseInt(ts.end_time.split(':')[1]);
+    const diffMins = endM - startM;
+    // Only auto-calc break if duration is positive (not a data entry error)
+    if (diffMins > 0) {
+      ts.break_mins = calcBreakMins(diffMins / 60) || null;
+    }
   }
 
   await dbSaveTimesheet(ts);
@@ -944,18 +948,23 @@ async function executeClockin(emp, note) {
   const shift = shifts.find(s => s.employee_id === emp.id && s.date === today);
 
   let ts = timesheets.find(t => t.employee_id === emp.id && t.date === today);
+  const actualClockInTime = new Date().toTimeString().slice(0, 5);
+
   if (!ts) {
     ts = {
       id:           uid(),
       employee_id:  emp.id,
       date:         today,
-      start_time:   shift?.start_time || new Date().toTimeString().slice(0,5),
-      end_time:     shift?.end_time   || null,
+      start_time:   actualClockInTime, // use actual clock-in time, not roster time
+      end_time:     null,
       break_mins:   null,
       status:       'pending',
       entry_method: 'clock',
       created_at:   now,
     };
+  } else {
+    // Update start_time to actual clock-in time even if ts already exists
+    ts.start_time = actualClockInTime;
   }
 
   ts.clock_in      = now;
