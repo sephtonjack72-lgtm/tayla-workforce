@@ -847,6 +847,8 @@ function onTrackMouseDown(e, empId, date) {
     document.removeEventListener('mouseup', up);
     document.body.style.userSelect = '';
     if (ghost) ghost.remove();
+    // If a modal is open, the mouseup came from inside the modal — don't create a shift
+    if (document.querySelector('.modal-overlay.show')) return;
     if (!active) return;
     const rect   = trackEl.getBoundingClientRect();
     const curPct = Math.max(0, Math.min(100, ((ev.clientX - rect.left) / rect.width) * 100));
@@ -1208,6 +1210,9 @@ async function saveShift() {
     break_mins: breakMins, notes, status,
   };
   await dbSaveShift(shift);
+  // Suppress any track click/mousedown that fires when modal closes
+  _dragJustFinished = true;
+  setTimeout(() => { _dragJustFinished = false; }, 300);
   closeModal('shift-modal');
   if (date === _activeDay) renderGanttPanel(date);
   renderDayTabs(getWeekDates(_currentWeekStart));
@@ -1223,6 +1228,8 @@ async function deleteShiftConfirm() {
   const date  = shift?.date;
   const empId = shift?.employee_id;
   await dbDeleteShift(id);
+  _dragJustFinished = true;
+  setTimeout(() => { _dragJustFinished = false; }, 300);
   closeModal('shift-modal');
 
   if (date === _activeDay) {
