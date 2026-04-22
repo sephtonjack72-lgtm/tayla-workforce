@@ -344,11 +344,15 @@ function buildGanttDay(date, dayShifts, activeEmps) {
   const unassignedShifts = dayShifts.filter(s => !s.employee_id);
   // Only show employees who have shifts on this day — no empty rows
   const withShifts = activeEmps.filter(e => dayShifts.some(s => s.employee_id === e.id));
-  // Sort employees by their earliest shift start time
+  // Respect manual row order — fall back to employee list order (no auto-sort by shift time)
+  const manualOrder = _rosterRowOrder[date] || [];
   withShifts.sort((a, b) => {
-    const aStart = dayShifts.filter(s => s.employee_id === a.id).map(s => s.start_time).sort()[0] || '99';
-    const bStart = dayShifts.filter(s => s.employee_id === b.id).map(s => s.start_time).sort()[0] || '99';
-    return aStart.localeCompare(bStart);
+    const ai = manualOrder.indexOf(a.id);
+    const bi = manualOrder.indexOf(b.id);
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
   });
   const ordered = withShifts;
 
@@ -514,6 +518,10 @@ function buildGanttRow(emp, date, empShifts) {
       <div class="gantt-row" id="${rowId}">
         <div class="gantt-emp-col" style="${!isFirst ? 'padding-top:0;' : ''}">
           ${isFirst ? `
+            <div class="gantt-row-handle" data-emp="${emp.id}" data-date="${date}"
+              onpointerdown="onRowHandlePointerDown(event,'${emp.id}','${date}')"
+              title="Drag to reorder"
+              style="cursor:grab;padding:0 4px;color:var(--text3);font-size:14px;flex-shrink:0;user-select:none;line-height:1;">⠿</div>
             <div class="avatar" style="width:28px;height:28px;font-size:10px;flex-shrink:0;">${initials}</div>
             <div style="min-width:0;flex:1;">
               <div style="font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${emp.first_name} ${emp.last_name}</div>
@@ -1298,4 +1306,149 @@ async function publishWeek() {
     btn.textContent = '📢 Publish Week';
     btn.disabled    = false;
   }
+}
+
+// ══════════════════════════════════════════════════════
+//  MANUAL ROW REORDER
+//  Drag the ⠿ handle to reorder employees in the roster
+//  Order is stored per-date in _rosterRowOrder
+// ══════════════════════════════════════════════════════
+
+if (typeof _rosterRowOrder === 'undefined') {
+  var _rosterRowOrder = {}; // { 'YYYY-MM-DD': ['emp-id-1', 'emp-id-2', ...] }
+}
+
+let _rowDrag = null; // active drag state
+
+function onRowHandlePointerDown(e, empId, date) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  const body     = document.getElementById(`gantt-body-${date}`);
+  if (!body) return;
+
+  // Collect all employee rows for this date (first row per employee only)
+  const allFirstRows = () => [...body.querySelectorAll('.gantt-row:not(.gantt-row-unassigned)')]
+    .filter(r => {
+      const id = r.id || '';
+      // Only first rows — id format is gantt-row-{empId}-{date} (no trailing shift id)
+      return id === `gantt-row-${id.split('-').slice(2, -1).join('-')}-${date}` ||
+             id.match(new RegExp(`^gantt-row-[^-]+-${date}$`));
+    });
+
+  // Simpler: collect rows that have a handle (first rows only)
+  const rowsWithHandle = [...body.querySelectorAll('.gantt-row-handle')].map(h => {
+    let el = h.closest('.gantt-row');
+    return el;
+  }).filter(Boolean);
+
+  const dragRowEl = document.getElementById(`gantt-row-${empId}-${date}`);
+  if (!dragRowEl) return;
+
+  const rect    = dragRowEl.getBoundingClientRect();
+  const offsetY = e.clientY - rect.top;
+
+  // Build ghost
+  const ghost = dragRowEl.cloneNode(true);
+  ghost.id    = 'gantt-row-drag-ghost';
+  ghost.style.cssText = `
+    position:fixed;
+    left:${rect.left}px;
+    width:${rect.width}px;
+    opacity:0.85;
+    pointer-events:none;
+    z-index:9999;
+    background:var(--surface);
+    box-shadow:0 4px 20px rgba(0,0,0,0.18);
+    border:1px solid var(--accent);
+    border-radius:6px;
+  `;
+  ghost.style.top = `${rect.top}px`;
+  document.body.appendChild(ghost);
+
+  // Dim the original
+  dragRowEl.style.opacity = '0.3';
+
+  _rowDrag = { empId, date, offsetY, ghost, dragRowEl };
+
+  document.addEventListener('pointermove', onRowDragMove, { passive: false });
+  document.addEventListener('pointerup',   onRowDragEnd);
+}
+
+function onRowDragMove(e) {
+  if (!_rowDrag) return;
+  e.preventDefault();
+  _rowDrag.ghost.style.top = `${e.clientY - _rowDrag.offsetY}px`;
+}
+
+function onRowDragEnd(e) {
+  if (!_rowDrag) return;
+
+  document.removeEventListener('pointermove', onRowDragMove);
+  document.removeEventListener('pointerup',   onRowDragEnd);
+
+  const { empId, date, ghost, dragRowEl } = _rowDrag;
+  _rowDrag = null;
+
+  ghost.remove();
+  dragRowEl.style.opacity = '';
+
+  const body = document.getElementById(`gantt-body-${date}`);
+  if (!body) return;
+
+  // Find which employee row we dropped onto
+  const empRows = [...body.querySelectorAll('.gantt-row-handle')].map(h => ({
+    el:    h.closest('.gantt-row'),
+    empId: h.dataset.emp,
+  })).filter(r => r.el);
+
+  // Find drop target by pointer Y position
+  let targetEmpId = null;
+  let insertBefore = true;
+
+  for (const row of empRows) {
+    if (row.empId === empId) continue;
+    const rect   = row.el.getBoundingClientRect();
+    const midY   = rect.top + rect.height / 2;
+    if (e.clientY < midY) {
+      targetEmpId  = row.empId;
+      insertBefore = true;
+      break;
+    }
+    // Check if we're in the lower half of this row
+    if (e.clientY >= rect.top && e.clientY < midY + rect.height) {
+      targetEmpId  = row.empId;
+      insertBefore = false;
+    }
+  }
+
+  // Rebuild order array for this date
+  const activeEmpsForDate = employees.filter(emp =>
+    shifts.some(s => s.date === date && s.employee_id === emp.id && s.status !== 'cancelled')
+  );
+
+  // Start from current visual order
+  const currentOrder = empRows.map(r => r.empId);
+
+  // Remove dragged item
+  const fromIdx = currentOrder.indexOf(empId);
+  if (fromIdx > -1) currentOrder.splice(fromIdx, 1);
+
+  // Insert at new position
+  if (targetEmpId) {
+    const toIdx = currentOrder.indexOf(targetEmpId);
+    if (toIdx > -1) {
+      currentOrder.splice(insertBefore ? toIdx : toIdx + 1, 0, empId);
+    } else {
+      currentOrder.push(empId);
+    }
+  } else {
+    // Dropped past all rows — append to end
+    currentOrder.push(empId);
+  }
+
+  _rosterRowOrder[date] = currentOrder;
+
+  // Re-render just the gantt panel for this date
+  renderGanttPanel(date);
 }
