@@ -344,15 +344,25 @@ function buildGanttDay(date, dayShifts, activeEmps) {
   const unassignedShifts = dayShifts.filter(s => !s.employee_id);
   // Only show employees who have shifts on this day — no empty rows
   const withShifts = activeEmps.filter(e => dayShifts.some(s => s.employee_id === e.id));
-  // Respect manual row order — fall back to employee list order (no auto-sort by shift time)
-  const manualOrder = _rosterRowOrder[date] || [];
+  // Respect manual row order — initialise from current employee list if not yet set
+  if (!_rosterRowOrder[date]) {
+    // Seed with current order so first render is stable
+    _rosterRowOrder[date] = withShifts.map(e => e.id);
+  } else {
+    // Append any new employees not yet in the order
+    withShifts.forEach(e => {
+      if (!_rosterRowOrder[date].includes(e.id)) {
+        _rosterRowOrder[date].push(e.id);
+      }
+    });
+    // Remove employees no longer on this date
+    _rosterRowOrder[date] = _rosterRowOrder[date].filter(id =>
+      withShifts.some(e => e.id === id)
+    );
+  }
+  const manualOrder = _rosterRowOrder[date];
   withShifts.sort((a, b) => {
-    const ai = manualOrder.indexOf(a.id);
-    const bi = manualOrder.indexOf(b.id);
-    if (ai === -1 && bi === -1) return 0;
-    if (ai === -1) return 1;
-    if (bi === -1) return -1;
-    return ai - bi;
+    return manualOrder.indexOf(a.id) - manualOrder.indexOf(b.id);
   });
   const ordered = withShifts;
 
@@ -677,22 +687,33 @@ function openAssignPopover(shiftId, barEl) {
     </div>
   `;
 
-  // Position relative to bar
+  // Append first so offsetHeight is accurate after layout
+  popover.style.visibility = 'hidden';
   document.body.appendChild(popover);
-  const barRect     = barEl.getBoundingClientRect();
-  const popW        = 280;
-  const popH        = popover.offsetHeight || 300;
-  let   left        = barRect.left + barRect.width / 2 - popW / 2;
-  let   top         = barRect.bottom + 8 + window.scrollY;
 
-  // Keep on screen
-  left = Math.max(8, Math.min(left, window.innerWidth - popW - 8));
-  if (barRect.bottom + popH + 8 > window.innerHeight) {
-    top = barRect.top + window.scrollY - popH - 8;
-  }
+  // Position after layout so offsetHeight is real
+  requestAnimationFrame(() => {
+    const barRect = barEl.getBoundingClientRect();
+    const popW    = 280;
+    const popH    = popover.offsetHeight || 320;
+    let   left    = barRect.left + barRect.width / 2 - popW / 2;
+    let   top     = barRect.bottom + 8 + window.scrollY;
 
-  popover.style.left = left + 'px';
-  popover.style.top  = top  + 'px';
+    // Clamp horizontal — never go off screen
+    left = Math.max(8, Math.min(left, window.innerWidth - popW - 8));
+
+    // Flip above bar if not enough space below
+    if (barRect.bottom + popH + 8 > window.innerHeight) {
+      top = barRect.top + window.scrollY - popH - 8;
+    }
+
+    // Final clamp — never go above top of page
+    top = Math.max(window.scrollY + 8, top);
+
+    popover.style.left       = left + 'px';
+    popover.style.top        = top  + 'px';
+    popover.style.visibility = '';
+  });
 
   _assignPopover = { shiftId, el: popover };
 
