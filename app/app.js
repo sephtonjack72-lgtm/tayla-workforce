@@ -2116,21 +2116,22 @@ function renderOverviewAnalytics(el, data) {
       <div class="kpi"><div class="kpi-label">Avg SPCH</div><div class="kpi-value">${fmt(avgSpch)}</div></div>
       <div class="kpi"><div class="kpi-label">Locations</div><div class="kpi-value">${data.length}</div></div>
     </div>
-    <div class="analytics-bars">
+    <div class="analytics-bars" style="height:160px;align-items:flex-end;">
       ${data.map((d, i) => {
-        const labourPct  = Math.max((d.labourCost / maxVal) * 100, 2);
-        const revenuePct = Math.max((d.revenue / maxVal) * 100, d.revenue > 0 ? 2 : 0);
+        const CHART_H    = 140;
+        const labourPx   = Math.max(Math.round((d.labourCost / maxVal) * CHART_H), 4);
+        const revenuePx  = Math.max(Math.round((d.revenue / maxVal) * CHART_H), d.revenue > 0 ? 4 : 0);
         const colour     = FRANCHISE_COLOURS[i % FRANCHISE_COLOURS.length];
         return `
-          <div class="analytics-bar-wrap">
+          <div class="analytics-bar-wrap" style="align-items:flex-end;">
             <div style="display:flex;gap:4px;align-items:flex-end;width:100%;justify-content:center;">
-              <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;">
                 <div class="analytics-bar-value" style="font-size:10px;">${fmt(d.labourCost)}</div>
-                <div class="analytics-bar" style="height:${labourPct}%;background:${colour};opacity:.7;"></div>
+                <div class="analytics-bar" style="height:${labourPx}px;min-height:4px;background:${colour};opacity:.8;border-radius:3px 3px 0 0;width:100%;"></div>
               </div>
-              <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;">
                 <div class="analytics-bar-value" style="font-size:10px;color:var(--success);">${fmt(d.revenue)}</div>
-                <div class="analytics-bar" style="height:${revenuePct}%;background:#38a169;"></div>
+                <div class="analytics-bar" style="height:${revenuePx}px;min-height:${d.revenue > 0 ? 4 : 0}px;background:#38a169;border-radius:3px 3px 0 0;width:100%;"></div>
               </div>
             </div>
             <div class="analytics-bar-label">${d.name}</div>
@@ -2154,15 +2155,15 @@ function renderBarChart(el, data, metric) {
   const maxVal = Math.max(...data.map(d => d[m.key]), 1);
 
   el.innerHTML = `
-    <div class="analytics-bars">
+    <div class="analytics-bars" style="height:160px;align-items:flex-end;">
       ${data.map((d, i) => {
-        const val = d[m.key];
-        const pct = Math.max((val / maxVal) * 100, 2);
+        const val    = d[m.key];
+        const px     = Math.max(Math.round((val / maxVal) * 140), 4);
         const colour = FRANCHISE_COLOURS[i % FRANCHISE_COLOURS.length];
         return `
-          <div class="analytics-bar-wrap" title="${d.name}: ${m.fmt(val)}">
+          <div class="analytics-bar-wrap" title="${d.name}: ${m.fmt(val)}" style="align-items:flex-end;">
             <div class="analytics-bar-value">${m.fmt(val)}</div>
-            <div class="analytics-bar" style="height:${pct}%;background:${colour};"></div>
+            <div class="analytics-bar" style="height:${px}px;min-height:4px;background:${colour};border-radius:3px 3px 0 0;width:80%;"></div>
             <div class="analytics-bar-label">${d.name}</div>
           </div>`;
       }).join('')}
