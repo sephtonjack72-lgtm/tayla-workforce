@@ -344,26 +344,14 @@ function buildGanttDay(date, dayShifts, activeEmps) {
   const unassignedShifts = dayShifts.filter(s => !s.employee_id);
   // Only show employees who have shifts on this day — no empty rows
   const withShifts = activeEmps.filter(e => dayShifts.some(s => s.employee_id === e.id));
-  // Respect manual row order — initialise from current employee list if not yet set
+  // Stable manual order — seed on first render, never auto-sort
   if (!_rosterRowOrder[date]) {
-    // Seed with current order so first render is stable
     _rosterRowOrder[date] = withShifts.map(e => e.id);
   } else {
-    // Append any new employees not yet in the order
-    withShifts.forEach(e => {
-      if (!_rosterRowOrder[date].includes(e.id)) {
-        _rosterRowOrder[date].push(e.id);
-      }
-    });
-    // Remove employees no longer on this date
-    _rosterRowOrder[date] = _rosterRowOrder[date].filter(id =>
-      withShifts.some(e => e.id === id)
-    );
+    withShifts.forEach(e => { if (!_rosterRowOrder[date].includes(e.id)) _rosterRowOrder[date].push(e.id); });
+    _rosterRowOrder[date] = _rosterRowOrder[date].filter(id => withShifts.some(e => e.id === id));
   }
-  const manualOrder = _rosterRowOrder[date];
-  withShifts.sort((a, b) => {
-    return manualOrder.indexOf(a.id) - manualOrder.indexOf(b.id);
-  });
+  withShifts.sort((a, b) => _rosterRowOrder[date].indexOf(a.id) - _rosterRowOrder[date].indexOf(b.id));
   const ordered = withShifts;
 
   const gridLines = hourMarks.slice(1).map(({pct}) =>
@@ -528,10 +516,10 @@ function buildGanttRow(emp, date, empShifts) {
       <div class="gantt-row" id="${rowId}">
         <div class="gantt-emp-col" style="${!isFirst ? 'padding-top:0;' : ''}">
           ${isFirst ? `
-            <div class="gantt-row-handle" data-emp="${emp.id}" data-date="${date}"
+            <div data-emp="${emp.id}" data-date="${date}"
               onpointerdown="onRowHandlePointerDown(event,'${emp.id}','${date}')"
               title="Drag to reorder"
-              style="cursor:grab;padding:0 4px;color:var(--text3);font-size:14px;flex-shrink:0;user-select:none;line-height:1;">⠿</div>
+              style="cursor:grab;padding:0 4px;color:var(--text3);font-size:14px;flex-shrink:0;user-select:none;">⠿</div>
             <div class="avatar" style="width:28px;height:28px;font-size:10px;flex-shrink:0;">${initials}</div>
             <div style="min-width:0;flex:1;">
               <div style="font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${emp.first_name} ${emp.last_name}</div>
@@ -687,29 +675,18 @@ function openAssignPopover(shiftId, barEl) {
     </div>
   `;
 
-  // Append first so offsetHeight is accurate after layout
+  // Append hidden first so offsetHeight is accurate after layout
   popover.style.visibility = 'hidden';
   document.body.appendChild(popover);
-
-  // Position after layout so offsetHeight is real
   requestAnimationFrame(() => {
     const barRect = barEl.getBoundingClientRect();
     const popW    = 280;
     const popH    = popover.offsetHeight || 320;
     let   left    = barRect.left + barRect.width / 2 - popW / 2;
     let   top     = barRect.bottom + 8 + window.scrollY;
-
-    // Clamp horizontal — never go off screen
     left = Math.max(8, Math.min(left, window.innerWidth - popW - 8));
-
-    // Flip above bar if not enough space below
-    if (barRect.bottom + popH + 8 > window.innerHeight) {
-      top = barRect.top + window.scrollY - popH - 8;
-    }
-
-    // Final clamp — never go above top of page
+    if (barRect.bottom + popH + 8 > window.innerHeight) top = barRect.top + window.scrollY - popH - 8;
     top = Math.max(window.scrollY + 8, top);
-
     popover.style.left       = left + 'px';
     popover.style.top        = top  + 'px';
     popover.style.visibility = '';
@@ -847,7 +824,6 @@ function onTrackMouseDown(e, empId, date) {
     document.removeEventListener('mouseup', up);
     document.body.style.userSelect = '';
     if (ghost) ghost.remove();
-    // If a modal is open, the mouseup came from inside the modal — don't create a shift
     if (document.querySelector('.modal-overlay.show')) return;
     if (!active) return;
     const rect   = trackEl.getBoundingClientRect();
@@ -1210,7 +1186,6 @@ async function saveShift() {
     break_mins: breakMins, notes, status,
   };
   await dbSaveShift(shift);
-  // Suppress any track click/mousedown that fires when modal closes
   _dragJustFinished = true;
   setTimeout(() => { _dragJustFinished = false; }, 300);
   closeModal('shift-modal');
@@ -1336,154 +1311,71 @@ async function publishWeek() {
   }
 }
 
+
 // ══════════════════════════════════════════════════════
-//  MANUAL ROW REORDER
-//  Drag the ⠿ handle to reorder employees in the roster
-//  Order is stored per-date in _rosterRowOrder
+//  MANUAL ROW REORDER — drag ⠿ handle to reorder employees
 // ══════════════════════════════════════════════════════
 
-if (typeof _rosterRowOrder === 'undefined') {
-  var _rosterRowOrder = {}; // { 'YYYY-MM-DD': ['emp-id-1', 'emp-id-2', ...] }
-}
+if (typeof _rosterRowOrder === 'undefined') var _rosterRowOrder = {};
 
-let _rowDrag = null; // active drag state
+let _rowDrag = null;
 
 function onRowHandlePointerDown(e, empId, date) {
   e.preventDefault();
   e.stopPropagation();
-
-  const body     = document.getElementById(`gantt-body-${date}`);
+  const body = document.getElementById('gantt-body-' + date);
   if (!body) return;
-
-  // Collect all employee rows for this date (first row per employee only)
-  const allFirstRows = () => [...body.querySelectorAll('.gantt-row:not(.gantt-row-unassigned)')]
-    .filter(r => {
-      const id = r.id || '';
-      // Only first rows — id format is gantt-row-{empId}-{date} (no trailing shift id)
-      return id === `gantt-row-${id.split('-').slice(2, -1).join('-')}-${date}` ||
-             id.match(new RegExp(`^gantt-row-[^-]+-${date}$`));
-    });
-
-  // Simpler: collect rows that have a handle (first rows only)
-  const rowsWithHandle = [...body.querySelectorAll('.gantt-row-handle')].map(h => {
-    let el = h.closest('.gantt-row');
-    return el;
-  }).filter(Boolean);
-
-  const dragRowEl = document.getElementById(`gantt-row-${empId}-${date}`);
+  const dragRowEl = document.getElementById('gantt-row-' + empId + '-' + date);
   if (!dragRowEl) return;
-
   const rect    = dragRowEl.getBoundingClientRect();
   const offsetY = e.clientY - rect.top;
-
-  // Build ghost
-  const ghost = dragRowEl.cloneNode(true);
-  ghost.id    = 'gantt-row-drag-ghost';
-  ghost.style.cssText = `
-    position:fixed;
-    left:${rect.left}px;
-    width:${rect.width}px;
-    opacity:0.85;
-    pointer-events:none;
-    z-index:9999;
-    background:var(--surface);
-    box-shadow:0 4px 20px rgba(0,0,0,0.18);
-    border:1px solid var(--accent);
-    border-radius:6px;
-  `;
-  ghost.style.top = `${rect.top}px`;
+  const ghost   = dragRowEl.cloneNode(true);
+  ghost.id      = 'gantt-row-drag-ghost';
+  ghost.style.cssText = 'position:fixed;left:' + rect.left + 'px;width:' + rect.width + 'px;top:' + rect.top + 'px;opacity:0.85;pointer-events:none;z-index:9999;background:var(--surface);box-shadow:0 4px 20px rgba(0,0,0,0.18);border:1px solid var(--accent);border-radius:6px;';
   document.body.appendChild(ghost);
-
-  // Dim the original
   dragRowEl.style.opacity = '0.3';
-
   _rowDrag = { empId, date, offsetY, ghost, dragRowEl };
-
   document.addEventListener('pointermove', onRowDragMove, { passive: false });
-  document.addEventListener('pointerup',   onRowDragEnd);
+  document.addEventListener('pointerup', onRowDragEnd);
 }
 
 function onRowDragMove(e) {
   if (!_rowDrag) return;
   e.preventDefault();
-  _rowDrag.ghost.style.top = `${e.clientY - _rowDrag.offsetY}px`;
+  _rowDrag.ghost.style.top = (e.clientY - _rowDrag.offsetY) + 'px';
 }
 
 function onRowDragEnd(e) {
   if (!_rowDrag) return;
-
   document.removeEventListener('pointermove', onRowDragMove);
-  document.removeEventListener('pointerup',   onRowDragEnd);
-
-  const { empId, date, ghost, dragRowEl } = _rowDrag;
+  document.removeEventListener('pointerup', onRowDragEnd);
+  var empId = _rowDrag.empId, date = _rowDrag.date;
+  _rowDrag.ghost.remove();
+  _rowDrag.dragRowEl.style.opacity = '';
   _rowDrag = null;
-
-  ghost.remove();
-  dragRowEl.style.opacity = '';
-
-  const body = document.getElementById(`gantt-body-${date}`);
+  var body = document.getElementById('gantt-body-' + date);
   if (!body) return;
-
-  // Find which employee row we dropped onto
-  const empRows = [...body.querySelectorAll('.gantt-row-handle')].map(h => ({
-    el:    h.closest('.gantt-row'),
-    empId: h.dataset.emp,
-  })).filter(r => r.el);
-
-  // Find drop target by pointer Y position
-  let targetEmpId = null;
-  let insertBefore = true;
-
-  for (const row of empRows) {
-    if (row.empId === empId) continue;
-    const rect   = row.el.getBoundingClientRect();
-    const midY   = rect.top + rect.height / 2;
-    if (e.clientY < midY) {
-      targetEmpId  = row.empId;
-      insertBefore = true;
-      break;
-    }
-    // Check if we're in the lower half of this row
-    if (e.clientY >= rect.top && e.clientY < midY + rect.height) {
-      targetEmpId  = row.empId;
-      insertBefore = false;
-    }
-  }
-
-  // Rebuild order array for this date
-  const activeEmpsForDate = employees.filter(emp =>
-    shifts.some(s => s.date === date && s.employee_id === emp.id && s.status !== 'cancelled')
-  );
-
-  // Start from current visual order
-  const currentOrder = empRows.map(r => r.empId);
-
-  // Remove dragged item
-  const fromIdx = currentOrder.indexOf(empId);
+  var handles = Array.from(body.querySelectorAll('[data-emp][data-date="' + date + '"]'));
+  var currentOrder = handles.map(function(h) { return h.dataset.emp; });
+  var fromIdx = currentOrder.indexOf(empId);
   if (fromIdx > -1) currentOrder.splice(fromIdx, 1);
-
-  // Insert at new position
+  var targetEmpId = null, insertBefore = true;
+  for (var i = 0; i < handles.length; i++) {
+    if (handles[i].dataset.emp === empId) continue;
+    var row  = handles[i].closest('.gantt-row');
+    if (!row) continue;
+    var midY = row.getBoundingClientRect().top + row.getBoundingClientRect().height / 2;
+    if (e.clientY < midY) { targetEmpId = handles[i].dataset.emp; insertBefore = true; break; }
+    targetEmpId = handles[i].dataset.emp; insertBefore = false;
+  }
   if (targetEmpId) {
-    const toIdx = currentOrder.indexOf(targetEmpId);
-    if (toIdx > -1) {
-      currentOrder.splice(insertBefore ? toIdx : toIdx + 1, 0, empId);
-    } else {
-      currentOrder.push(empId);
-    }
+    var toIdx = currentOrder.indexOf(targetEmpId);
+    if (toIdx > -1) currentOrder.splice(insertBefore ? toIdx : toIdx + 1, 0, empId);
+    else currentOrder.push(empId);
   } else {
-    // Dropped past all rows — append to end
     currentOrder.push(empId);
   }
-
   _rosterRowOrder[date] = currentOrder;
-
-  // Remove all existing employee rows for this date before re-render
-  // to prevent duplicates from partial DOM state
-  const bodyEl = document.getElementById(`gantt-body-${date}`);
-  if (bodyEl) {
-    bodyEl.querySelectorAll('.gantt-row:not(.gantt-row-unassigned)').forEach(el => el.remove());
-  }
-
-  // Re-render just the gantt panel for this date
+  body.querySelectorAll('.gantt-row:not(.gantt-row-unassigned)').forEach(function(el) { el.remove(); });
   renderGanttPanel(date);
 }
