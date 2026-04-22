@@ -1449,6 +1449,13 @@ function onRowDragEnd(e) {
 
   _rosterRowOrder[date] = currentOrder;
 
+  // Remove all existing employee rows for this date before re-render
+  // to prevent duplicates from partial DOM state
+  const bodyEl = document.getElementById(`gantt-body-${date}`);
+  if (bodyEl) {
+    bodyEl.querySelectorAll('.gantt-row:not(.gantt-row-unassigned)').forEach(el => el.remove());
+  }
+
   // Re-render just the gantt panel for this date
   renderGanttPanel(date);
 }
