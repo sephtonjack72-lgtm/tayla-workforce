@@ -2116,31 +2116,27 @@ function renderOverviewAnalytics(el, data) {
       <div class="kpi"><div class="kpi-label">Avg SPCH</div><div class="kpi-value">${fmt(avgSpch)}</div></div>
       <div class="kpi"><div class="kpi-label">Locations</div><div class="kpi-value">${data.length}</div></div>
     </div>
-    <div style="position:relative;width:100%;height:180px;overflow:hidden;">
-      <div style="position:absolute;bottom:24px;left:0;right:0;top:0;display:flex;align-items:flex-end;gap:8px;padding:0 8px;">
-        ${data.map((d, i) => {
-          const CHART_H    = 140;
-          const labourPx   = Math.max(Math.round((d.labourCost / maxVal) * CHART_H), 4);
-          const revenuePx  = Math.max(Math.round((d.revenue / maxVal) * CHART_H), d.revenue > 0 ? 4 : 0);
-          const colour     = FRANCHISE_COLOURS[i % FRANCHISE_COLOURS.length];
-          return `
-            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:0;min-width:0;">
-              <div style="display:flex;gap:3px;align-items:flex-end;width:100%;justify-content:center;">
-                <div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;min-width:0;">
-                  <div style="font-size:9px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;text-align:center;">${fmt(d.labourCost)}</div>
-                  <div style="height:${labourPx}px;width:100%;background:${colour};opacity:.85;border-radius:3px 3px 0 0;"></div>
-                </div>
-                <div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;min-width:0;">
-                  <div style="font-size:9px;color:var(--success);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;text-align:center;">${fmt(d.revenue)}</div>
-                  <div style="height:${revenuePx}px;width:100%;background:#38a169;border-radius:3px 3px 0 0;"></div>
-                </div>
+    <div style="display:flex;align-items:flex-end;gap:12px;height:160px;padding:0 8px 24px;position:relative;border-bottom:1px solid var(--border);">
+      ${data.map((d, i) => {
+        const CHART_H    = 120;
+        const labourPx   = Math.max(Math.round((d.labourCost / maxVal) * CHART_H), 3);
+        const revenuePx  = Math.max(Math.round((d.revenue / maxVal) * CHART_H), d.revenue > 0 ? 3 : 0);
+        const colour     = FRANCHISE_COLOURS[i % FRANCHISE_COLOURS.length];
+        return `
+          <div style="flex:1;max-width:120px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:0;min-width:40px;">
+            <div style="display:flex;gap:3px;align-items:flex-end;width:100%;">
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
+                <span style="font-size:9px;color:var(--text3);">${fmt(d.labourCost)}</span>
+                <div style="height:${labourPx}px;width:100%;background:${colour};opacity:.85;border-radius:3px 3px 0 0;"></div>
               </div>
-            </div>`;
-        }).join('')}
-      </div>
-      <div style="position:absolute;bottom:0;left:0;right:0;display:flex;gap:8px;padding:0 8px;">
-        ${data.map(d => `<div style="flex:1;font-size:10px;color:var(--text3);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.name}</div>`).join('')}
-      </div>
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
+                <span style="font-size:9px;color:var(--success);">${fmt(d.revenue)}</span>
+                <div style="height:${revenuePx}px;width:100%;background:#38a169;border-radius:3px 3px 0 0;"></div>
+              </div>
+            </div>
+            <div style="font-size:10px;color:var(--text3);margin-top:4px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${d.name}</div>
+          </div>`;
+      }).join('')}
     </div>
     <div style="display:flex;gap:16px;justify-content:center;margin-top:10px;font-size:11px;color:var(--text3);">
       <span><span style="display:inline-block;width:10px;height:10px;background:${FRANCHISE_COLOURS[0]};opacity:.7;border-radius:2px;margin-right:4px;"></span>Labour</span>
@@ -2159,22 +2155,18 @@ function renderBarChart(el, data, metric) {
   const maxVal = Math.max(...data.map(d => d[m.key]), 1);
 
   el.innerHTML = `
-    <div style="position:relative;width:100%;height:180px;overflow:hidden;">
-      <div style="position:absolute;bottom:24px;left:0;right:0;top:0;display:flex;align-items:flex-end;gap:8px;padding:0 8px;">
-        ${data.map((d, i) => {
-          const val    = d[m.key];
-          const px     = Math.max(Math.round((val / maxVal) * 140), 4);
-          const colour = FRANCHISE_COLOURS[i % FRANCHISE_COLOURS.length];
-          return `
-            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;" title="${d.name}: ${m.fmt(val)}">
-              <div style="font-size:9px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;text-align:center;">${m.fmt(val)}</div>
-              <div style="height:${px}px;width:80%;background:${colour};border-radius:3px 3px 0 0;"></div>
-            </div>`;
-        }).join('')}
-      </div>
-      <div style="position:absolute;bottom:0;left:0;right:0;display:flex;gap:8px;padding:0 8px;">
-        ${data.map(d => `<div style="flex:1;font-size:10px;color:var(--text3);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.name}</div>`).join('')}
-      </div>
+    <div style="display:flex;align-items:flex-end;gap:12px;height:160px;padding:0 8px 24px;border-bottom:1px solid var(--border);">
+      ${data.map((d, i) => {
+        const val    = d[m.key];
+        const px     = Math.max(Math.round((val / maxVal) * 120), 3);
+        const colour = FRANCHISE_COLOURS[i % FRANCHISE_COLOURS.length];
+        return `
+          <div style="flex:1;max-width:120px;min-width:40px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:0;" title="${d.name}: ${m.fmt(val)}">
+            <span style="font-size:9px;color:var(--text3);margin-bottom:2px;">${m.fmt(val)}</span>
+            <div style="height:${px}px;width:70%;background:${colour};border-radius:3px 3px 0 0;"></div>
+            <div style="font-size:10px;color:var(--text3);margin-top:4px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${d.name}</div>
+          </div>`;
+      }).join('')}
     </div>
     <div style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center;">${m.label} by location</div>
   `;
