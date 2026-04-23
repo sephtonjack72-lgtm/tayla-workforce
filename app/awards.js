@@ -19,6 +19,7 @@ const AWARD_DATA = {
     name:       'Fast Food Industry Award (MA000003)',
     short:      'MA000003',
     base_rate:  26.55, // Level 1 adult hourly rate
+    levels:     { 1: 26.55, 2: 27.40, 3: 28.25 },
     min_engagement_hours: 3,
     meal_break_after_hours: 5,
     meal_break_mins: 30,
@@ -51,6 +52,7 @@ const AWARD_DATA = {
     name:       'Hospitality Industry (General) Award (MA000009)',
     short:      'MA000009 — HIGA',
     base_rate:  24.95, // Level 1 Food & Bev Attendant Gr 1
+    levels:     { 1: 24.95, 2: 25.84, 3: 26.55, 4: 28.12 },
     min_engagement_hours: 2,
     meal_break_after_hours: 5,
     meal_break_mins: 30,
@@ -84,6 +86,7 @@ const AWARD_DATA = {
     name:       'Restaurant Industry Award (MA000119)',
     short:      'MA000119 — RIA',
     base_rate:  24.95, // Level 1 Food & Bev Attendant Gr 1
+    levels:     { 1: 24.95, 2: 25.84, 3: 26.55, 4: 28.12 },
     min_engagement_hours: 2, // casual 2hrs; PT 3hrs; FT 6hrs/day
     meal_break_after_hours: 5,
     meal_break_mins: 30,
@@ -116,6 +119,7 @@ const AWARD_DATA = {
     name:       'General Retail Industry Award (MA000004)',
     short:      'MA000004 — Retail',
     base_rate:  26.55, // Level 1 adult — notably higher than hospitality
+    levels:     { 1: 26.55, 2: 27.95, 3: 29.35, 4: 31.10 },
     min_engagement_hours: 3,
     meal_break_after_hours: 5,
     meal_break_mins: 30,
@@ -148,6 +152,7 @@ const AWARD_DATA = {
     name:       'Registered & Licensed Clubs Award (MA000058)',
     short:      'MA000058 — Clubs',
     base_rate:  24.95, // Level 1 Kitchen/Bar Attendant Gr 1
+    levels:     { 1: 24.95, 2: 25.84, 3: 26.55, 4: 28.12 },
     min_engagement_hours: 3,
     meal_break_after_hours: 5,
     meal_break_mins: 30,
@@ -180,6 +185,7 @@ const AWARD_DATA = {
     name:       'Hair & Beauty Industry Award (MA000005)',
     short:      'MA000005 — Hair & Beauty',
     base_rate:  25.15, // Level 3 is the "standard rate" — used as benchmark
+    levels:     { 1: 24.17, 2: 25.15, 3: 26.14, 4: 27.55 },
     min_engagement_hours: 3,
     meal_break_after_hours: 5,
     meal_break_mins: 30,
