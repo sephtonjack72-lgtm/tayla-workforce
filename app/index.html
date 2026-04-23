@@ -598,7 +598,17 @@
           </select>
         </div>
         <div class="form-group">
-          <label>Hourly Rate ($) <span style="font-size:11px;color:var(--text3);font-weight:400;">Leave blank to use award rate</span></label>
+          <label>Award Level <span style="font-size:11px;color:var(--text3);font-weight:400;">Sets base pay rate</span></label>
+          <select id="emp-award-level" onchange="onAwardLevelChange()">
+            <option value="">— Select level —</option>
+            <option value="1">Level 1</option>
+            <option value="2">Level 2</option>
+            <option value="3">Level 3</option>
+            <option value="4">Level 4</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Hourly Rate ($) <span style="font-size:11px;color:var(--text3);font-weight:400;">Auto-filled by level, or override manually</span></label>
           <input type="number" id="emp-rate" step="0.01" min="0" placeholder="${AWARD_BASE_RATE}">
         </div>
         <div class="form-group">
@@ -1284,5 +1294,15 @@
   </div>
 </div>
 
+<script>
+function onAwardLevelChange() {
+  const level = parseInt(document.getElementById('emp-award-level').value);
+  if (!level) return;
+  const awardType = _businessProfile?.award_type || 'ma000003';
+  const award = AWARD_DATA[awardType];
+  if (!award?.levels?.[level]) return;
+  document.getElementById('emp-rate').value = award.levels[level].toFixed(2);
+}
+</script>
 </body>
 </html>
