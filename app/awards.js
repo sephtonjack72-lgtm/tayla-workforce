@@ -18,7 +18,7 @@ const AWARD_DATA = {
   ma000003: {
     name:       'Fast Food Industry Award (MA000003)',
     short:      'MA000003',
-    base_rate:  24.13, // Level 1 adult hourly rate
+    base_rate:  26.55, // Level 1 adult hourly rate
     min_engagement_hours: 3,
     meal_break_after_hours: 5,
     meal_break_mins: 30,
@@ -50,7 +50,7 @@ const AWARD_DATA = {
   ma000009: {
     name:       'Hospitality Industry (General) Award (MA000009)',
     short:      'MA000009 — HIGA',
-    base_rate:  24.17, // Level 1 Food & Bev Attendant Gr 1
+    base_rate:  24.95, // Level 1 Food & Bev Attendant Gr 1
     min_engagement_hours: 2,
     meal_break_after_hours: 5,
     meal_break_mins: 30,
@@ -83,7 +83,7 @@ const AWARD_DATA = {
   ma000119: {
     name:       'Restaurant Industry Award (MA000119)',
     short:      'MA000119 — RIA',
-    base_rate:  24.17, // Level 1 Food & Bev Attendant Gr 1
+    base_rate:  24.95, // Level 1 Food & Bev Attendant Gr 1
     min_engagement_hours: 2, // casual 2hrs; PT 3hrs; FT 6hrs/day
     meal_break_after_hours: 5,
     meal_break_mins: 30,
@@ -147,7 +147,7 @@ const AWARD_DATA = {
   ma000058: {
     name:       'Registered & Licensed Clubs Award (MA000058)',
     short:      'MA000058 — Clubs',
-    base_rate:  24.17, // Level 1 Kitchen/Bar Attendant Gr 1
+    base_rate:  24.95, // Level 1 Kitchen/Bar Attendant Gr 1
     min_engagement_hours: 3,
     meal_break_after_hours: 5,
     meal_break_mins: 30,
