@@ -2107,7 +2107,8 @@ function renderOverviewAnalytics(el, data) {
   const totalRevenue = data.reduce((s, d) => s + d.revenue, 0);
   const avgSpch      = data.filter(d => d.spch > 0).reduce((s, d) => s + d.spch, 0) / (data.filter(d => d.spch > 0).length || 1);
 
-  const maxVal = Math.max(...data.map(d => Math.max(d.labourCost, d.revenue)), 1);
+  const maxVal = Math.max(...data.map(d => Math.max(d.labourCost, d.revenue)), 0);
+  const hasData = maxVal > 0;
 
   el.innerHTML = `
     <div class="analytics-overview-grid">
@@ -2116,6 +2117,7 @@ function renderOverviewAnalytics(el, data) {
       <div class="kpi"><div class="kpi-label">Avg SPCH</div><div class="kpi-value">${fmt(avgSpch)}</div></div>
       <div class="kpi"><div class="kpi-label">Locations</div><div class="kpi-value">${data.length}</div></div>
     </div>
+    ${hasData ? `
     <div style="display:flex;align-items:flex-end;gap:12px;height:160px;padding:0 8px 24px;position:relative;border-bottom:1px solid var(--border);">
       ${data.map((d, i) => {
         const CHART_H    = 120;
@@ -2141,7 +2143,12 @@ function renderOverviewAnalytics(el, data) {
     <div style="display:flex;gap:16px;justify-content:center;margin-top:10px;font-size:11px;color:var(--text3);">
       <span><span style="display:inline-block;width:10px;height:10px;background:${FRANCHISE_COLOURS[0]};opacity:.7;border-radius:2px;margin-right:4px;"></span>Labour</span>
       <span><span style="display:inline-block;width:10px;height:10px;background:#38a169;border-radius:2px;margin-right:4px;"></span>Revenue (actual)</span>
-    </div>
+    </div>` : `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:160px;border-bottom:1px solid var(--border);gap:8px;">
+      <div style="font-size:28px;opacity:.25;">📊</div>
+      <div style="font-size:13px;color:var(--text3);">No shifts or sales logged for this period</div>
+      <div style="font-size:11px;color:var(--text3);opacity:.7;">Add timesheets or sales data to see analytics</div>
+    </div>`}
   `;
 }
 
@@ -2152,9 +2159,11 @@ function renderBarChart(el, data, metric) {
     spch:    { key: 'spch',       label: 'SPCH',          fmt: v => fmt(v),   colour: '#3d5afe' },
   };
   const m      = metricMap[metric];
-  const maxVal = Math.max(...data.map(d => d[m.key]), 1);
+  const maxVal = Math.max(...data.map(d => d[m.key]), 0);
+  const hasData = maxVal > 0;
 
   el.innerHTML = `
+    ${hasData ? `
     <div style="display:flex;align-items:flex-end;gap:12px;height:160px;padding:0 8px 24px;border-bottom:1px solid var(--border);">
       ${data.map((d, i) => {
         const val    = d[m.key];
@@ -2168,7 +2177,12 @@ function renderBarChart(el, data, metric) {
           </div>`;
       }).join('')}
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center;">${m.label} by location</div>
+    <div style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center;">${m.label} by location</div>` : `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:160px;border-bottom:1px solid var(--border);gap:8px;">
+      <div style="font-size:28px;opacity:.25;">📊</div>
+      <div style="font-size:13px;color:var(--text3);">No ${m.label.toLowerCase()} data for this period</div>
+      <div style="font-size:11px;color:var(--text3);opacity:.7;">Add timesheets or sales data to see analytics</div>
+    </div>`}
   `;
 }
 
