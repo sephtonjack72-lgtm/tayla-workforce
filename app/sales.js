@@ -18,6 +18,7 @@ function getBizSupabase() {
 
 // Linked Business account ID — set from businesses.linked_business_id
 let _linkedBusinessId = null;
+let _posConnection = null;
 
 // salesData keyed by date: { projected, actual, target_spch, food, beverage, other }
 let salesData = JSON.parse(localStorage.getItem('wf_sales') || '{}');
