@@ -165,6 +165,9 @@ async function saveEmployee() {
   const lastName  = document.getElementById('emp-last-name').value.trim();
   if (!firstName || !lastName) { toast('First and last name are required'); return; }
 
+  // Preserve fields that exist on the record but aren't in the form
+  const existing = editId ? (employees.find(e => e.id === editId) || {}) : {};
+
   const emp = {
     id:                   editId || uid(),
     first_name:           firstName,
@@ -187,12 +190,18 @@ async function saveEmployee() {
     tax_free_threshold:   document.getElementById('emp-tax-free').value === 'true',
     residency_status:     document.getElementById('emp-residency').value,
     myob_card_id:         document.getElementById('emp-myob-card-id').value.trim() || null,
+    award_level:          parseInt(document.getElementById('emp-award-level').value) || null,
     // STP2 fields
     date_of_birth:        document.getElementById('emp-dob').value || null,
     gender:               document.getElementById('emp-gender').value || null,
     termination_date:     document.getElementById('emp-termination-date').value || null,
     salary_sacrifice:     parseFloat(document.getElementById('emp-salary-sacrifice').value) || 0,
     created_at:           editId ? undefined : new Date().toISOString(),
+    // Preserve non-form fields from existing record
+    tayla_user_id:        existing.tayla_user_id        || null,
+    super_fund_abn:       existing.super_fund_abn       || null,
+    invite_token:         existing.invite_token         || null,
+    invite_expires_at:    existing.invite_expires_at    || null,
   };
   if (!editId) delete emp.created_at;
 
