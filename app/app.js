@@ -2124,7 +2124,7 @@ function renderOverviewAnalytics(el, data) {
         const labourPx   = Math.max(Math.round((d.labourCost / maxVal) * CHART_H), 3);
         const revenuePx  = Math.max(Math.round((d.revenue / maxVal) * CHART_H), d.revenue > 0 ? 3 : 0);
         const colour     = FRANCHISE_COLOURS[i % FRANCHISE_COLOURS.length];
-        const barW       = data.length === 1 ? '60px' : '100%';
+        const barW       = data.length === 1 ? '32px' : '45%';
         return `
           <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:0;min-width:40px;">
             <div style="display:flex;gap:4px;align-items:flex-end;width:${barW};margin:0 auto;">
@@ -2170,7 +2170,7 @@ function renderBarChart(el, data, metric) {
         const val    = d[m.key];
         const px     = Math.max(Math.round((val / maxVal) * 120), 3);
         const colour = FRANCHISE_COLOURS[i % FRANCHISE_COLOURS.length];
-        const barW   = data.length === 1 ? '60px' : '70%';
+        const barW   = data.length === 1 ? '32px' : '45%';
         return `
           <div style="flex:1;min-width:40px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:0;" title="${d.name}: ${m.fmt(val)}">
             <span style="font-size:9px;color:var(--text3);margin-bottom:2px;">${m.fmt(val)}</span>
