@@ -2118,15 +2118,16 @@ function renderOverviewAnalytics(el, data) {
       <div class="kpi"><div class="kpi-label">Locations</div><div class="kpi-value">${data.length}</div></div>
     </div>
     ${hasData ? `
-    <div style="display:flex;align-items:flex-end;gap:12px;height:160px;padding:0 8px 24px;position:relative;border-bottom:1px solid var(--border);">
+    <div style="display:flex;align-items:flex-end;gap:16px;height:160px;padding:0 16px 24px;position:relative;border-bottom:1px solid var(--border);">
       ${data.map((d, i) => {
         const CHART_H    = 120;
         const labourPx   = Math.max(Math.round((d.labourCost / maxVal) * CHART_H), 3);
         const revenuePx  = Math.max(Math.round((d.revenue / maxVal) * CHART_H), d.revenue > 0 ? 3 : 0);
         const colour     = FRANCHISE_COLOURS[i % FRANCHISE_COLOURS.length];
+        const barW       = data.length === 1 ? '60px' : '100%';
         return `
-          <div style="flex:1;max-width:120px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:0;min-width:40px;">
-            <div style="display:flex;gap:3px;align-items:flex-end;width:100%;">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:0;min-width:40px;">
+            <div style="display:flex;gap:4px;align-items:flex-end;width:${barW};margin:0 auto;">
               <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
                 <span style="font-size:9px;color:var(--text3);">${fmt(d.labourCost)}</span>
                 <div style="height:${labourPx}px;width:100%;background:${colour};opacity:.85;border-radius:3px 3px 0 0;"></div>
@@ -2164,15 +2165,16 @@ function renderBarChart(el, data, metric) {
 
   el.innerHTML = `
     ${hasData ? `
-    <div style="display:flex;align-items:flex-end;gap:12px;height:160px;padding:0 8px 24px;border-bottom:1px solid var(--border);">
+    <div style="display:flex;align-items:flex-end;gap:16px;height:160px;padding:0 16px 24px;border-bottom:1px solid var(--border);">
       ${data.map((d, i) => {
         const val    = d[m.key];
         const px     = Math.max(Math.round((val / maxVal) * 120), 3);
         const colour = FRANCHISE_COLOURS[i % FRANCHISE_COLOURS.length];
+        const barW   = data.length === 1 ? '60px' : '70%';
         return `
-          <div style="flex:1;max-width:120px;min-width:40px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:0;" title="${d.name}: ${m.fmt(val)}">
+          <div style="flex:1;min-width:40px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:0;" title="${d.name}: ${m.fmt(val)}">
             <span style="font-size:9px;color:var(--text3);margin-bottom:2px;">${m.fmt(val)}</span>
-            <div style="height:${px}px;width:70%;background:${colour};border-radius:3px 3px 0 0;"></div>
+            <div style="height:${px}px;width:${barW};background:${colour};border-radius:3px 3px 0 0;"></div>
             <div style="font-size:10px;color:var(--text3);margin-top:4px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${d.name}</div>
           </div>`;
       }).join('')}
